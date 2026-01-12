@@ -204,7 +204,7 @@ const App: React.FC = () => {
         );
       case 'fleet': return <div className="p-12 h-full"><FleetManagement /></div>;
       case 'areas': return <div className="p-12 h-full"><AreasFields /></div>;
-      case 'reports': return <div className="p-12 h-full"><Reports /></div>;
+      case 'reports': return <div className="p-12 h-full"><Reports orders={orders} /></div>;
       default: return null;
     }
   };

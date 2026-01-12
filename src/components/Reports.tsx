@@ -1,7 +1,5 @@
-
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  FileText, 
   Download, 
   CheckCircle2, 
   Clock, 
@@ -14,19 +12,14 @@ import {
   Calendar, 
   MapPin, 
   Hash,
-  Eye,
-  AlertCircle,
-  DollarSign,
-  TrendingUp
+  FileText,
+  Droplets
 } from 'lucide-react';
-import { OrderStatus } from '../types';
+import { OrderStatus, ServiceOrder } from '../types';
 
-const MOCK_ORDERS = [
-  { id: '1', farm: 'ALIANÇA', field: 'TALHÃO NORTE 01', area: 85.0, culture: 'MILHO', status: OrderStatus.IN_PROGRESS, date: '15/03/2026', totalCost: 18450.00 },
-  { id: '2', farm: 'SANTO AURÉLIO', field: 'PIVÔ 13', area: 240.0, culture: 'SOJA', status: OrderStatus.SCHEDULED, date: '18/03/2026', totalCost: 52800.00 },
-  { id: '3', farm: 'MANGA', field: 'PC 44', area: 120.0, culture: 'ALGODÃO', status: OrderStatus.AWAITING_INSPECTION, date: '14/03/2026', totalCost: 31200.00 },
-  { id: '4', farm: 'SANTO AURÉLIO', field: 'TALHÃO SUL', area: 55.0, culture: 'MILHO', status: OrderStatus.REWORK, date: '10/03/2026', totalCost: 11940.00 },
-];
+interface ReportsProps {
+  orders: ServiceOrder[];
+}
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   const styles = {
@@ -36,15 +29,23 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
     [OrderStatus.AWAITING_INSPECTION]: 'bg-amber-50 text-amber-600 border-amber-100',
     [OrderStatus.REWORK]: 'bg-red-50 text-red-600 border-red-100',
     [OrderStatus.DRAFT]: 'bg-slate-50 text-slate-400 border-slate-100',
+    [OrderStatus.EMITTED]: 'bg-purple-50 text-purple-600 border-purple-100',
+    [OrderStatus.AWAITING_PRODUCT]: 'bg-orange-50 text-orange-600 border-orange-100',
+    [OrderStatus.CANCELLED]: 'bg-gray-100 text-gray-500 border-gray-200',
+    [OrderStatus.LATE]: 'bg-rose-50 text-rose-600 border-rose-100',
   };
 
   const labels = {
     [OrderStatus.IN_PROGRESS]: 'EM APLICAÇÃO',
     [OrderStatus.SCHEDULED]: 'AGENDADO',
-    [OrderStatus.AWAITING_INSPECTION]: 'AGUARDANDO VISTORIA',
+    [OrderStatus.AWAITING_INSPECTION]: 'VISTORIA',
     [OrderStatus.REWORK]: 'RETRABALHO',
     [OrderStatus.COMPLETED]: 'CONCLUÍDO',
     [OrderStatus.DRAFT]: 'RASCUNHO',
+    [OrderStatus.EMITTED]: 'EMITIDA',
+    [OrderStatus.AWAITING_PRODUCT]: 'AGUARD. PRODUTO',
+    [OrderStatus.CANCELLED]: 'CANCELADO',
+    [OrderStatus.LATE]: 'ATRASADA',
   };
 
   const icons = {
@@ -54,6 +55,10 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
     [OrderStatus.REWORK]: <ShieldAlert size={14} />,
     [OrderStatus.COMPLETED]: <CheckCircle2 size={14} />,
     [OrderStatus.DRAFT]: <FileText size={14} />,
+    [OrderStatus.EMITTED]: <FileText size={14} />,
+    [OrderStatus.AWAITING_PRODUCT]: <Clock size={14} />,
+    [OrderStatus.CANCELLED]: <ShieldAlert size={14} />,
+    [OrderStatus.LATE]: <ShieldAlert size={14} />,
   };
 
   return (
@@ -79,8 +84,23 @@ const MetricCard: React.FC<{ title: string, value: string, unit: string, icon: a
   </div>
 );
 
-const Reports: React.FC = () => {
-  const totalInvestment = MOCK_ORDERS.reduce((acc, order) => acc + (order.totalCost || 0), 0);
+const Reports: React.FC<ReportsProps> = ({ orders }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Métricas calculadas com base nos dados reais
+  const totalArea = orders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
+  const totalVolume = orders.reduce((acc, order) => acc + (order.totalVolume || 0), 0);
+  const completedCount = orders.filter(o => o.status === OrderStatus.COMPLETED).length;
+  const inProgressCount = orders.filter(o => o.status === OrderStatus.IN_PROGRESS).length;
+  const reworkCount = orders.filter(o => o.status === OrderStatus.REWORK || o.status === OrderStatus.LATE).length;
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => 
+      o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.farmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      o.culture.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [orders, searchTerm]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -103,29 +123,29 @@ const Reports: React.FC = () => {
       {/* Summary Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
         <MetricCard 
-          title="Investimento Total" 
-          value={`R$ ${totalInvestment.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}`} 
-          unit="Insumos" 
-          icon={DollarSign} 
+          title="Área Total Planejada" 
+          value={totalArea.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} 
+          unit="Hectares" 
+          icon={Hash} 
           color="bg-emerald-600" 
         />
         <MetricCard 
-          title="Concluídas" 
-          value="1.240" 
-          unit="Ordens" 
+          title="Volume de Calda" 
+          value={(totalVolume / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} 
+          unit="Mil Litros" 
+          icon={Droplets} 
+          color="bg-blue-600" 
+        />
+        <MetricCard 
+          title="Ordens Concluídas" 
+          value={completedCount.toString()} 
+          unit="Execuções" 
           icon={CheckCircle2} 
           color="bg-emerald-500" 
         />
         <MetricCard 
-          title="Em Execução" 
-          value="12" 
-          unit="Máquinas" 
-          icon={PlayCircle} 
-          color="bg-blue-500" 
-        />
-        <MetricCard 
-          title="Reprovadas / RNC" 
-          value="03" 
+          title="Atenção / Retrabalho" 
+          value={reworkCount.toString()} 
           unit="Casos" 
           icon={ShieldAlert} 
           color="bg-red-500" 
@@ -140,6 +160,8 @@ const Reports: React.FC = () => {
             type="text" 
             placeholder="BUSCAR POR ID OU PROPRIEDADE..." 
             className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-14 pr-6 py-4 text-[10px] font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         <div className="relative group">
@@ -165,71 +187,84 @@ const Reports: React.FC = () => {
                 <th className="px-10 py-8">Fazenda / Talhão</th>
                 <th className="px-10 py-8"># / Área</th>
                 <th className="px-10 py-8">Cultura</th>
-                <th className="px-10 py-8">Custo Insumos</th>
+                <th className="px-10 py-8">Volume Calda</th>
                 <th className="px-10 py-8">Status Atual</th>
-                <th className="px-10 py-8">Data Planejada</th>
+                <th className="px-10 py-8">Limite Aplicação</th>
                 <th className="px-10 py-8 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {MOCK_ORDERS.map((order) => (
-                <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="px-10 py-8">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <MapPin size={12} className="text-slate-300" />
-                        <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{order.farm}</span>
+              {filteredOrders.length > 0 ? (
+                filteredOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-10 py-8">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <MapPin size={12} className="text-slate-300" />
+                          <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{order.farmName}</span>
+                        </div>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 truncate max-w-[200px]">
+                          {order.fieldNames.join(', ')}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5">{order.field}</span>
-                    </div>
-                  </td>
-                  <td className="px-10 py-8">
-                    <div className="flex flex-col">
-                       <div className="flex items-center gap-2">
-                          <Hash size={14} className="text-slate-300" />
-                          <span className="text-base font-black text-slate-900 tracking-tighter">{order.area.toFixed(1)} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
-                       </div>
-                    </div>
-                  </td>
-                  <td className="px-10 py-8">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
-                  </td>
-                  <td className="px-10 py-8">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black text-emerald-600 tracking-tight italic">
-                        R$ {order.totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                        {(order.totalCost / order.area).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} / HA
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-10 py-8">
-                    <StatusBadge status={order.status} />
-                  </td>
-                  <td className="px-10 py-8">
-                    <div className="flex items-center gap-3">
-                      <Calendar size={16} className="text-slate-300" />
-                      <span className="text-xs font-black text-slate-700 tracking-widest">{order.date}</span>
-                    </div>
-                  </td>
-                  <td className="px-10 py-8 text-right">
-                    <button className="p-3 text-slate-300 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95">
-                      <MoreHorizontal size={24} />
-                    </button>
+                    </td>
+                    <td className="px-10 py-8">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-slate-400 uppercase mb-1">#{order.orderNumber}</span>
+                        <div className="flex items-center gap-2">
+                            <Hash size={14} className="text-slate-300" />
+                            <span className="text-base font-black text-slate-900 tracking-tighter">{order.totalArea.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-10 py-8">
+                      <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
+                    </td>
+                    <td className="px-10 py-8">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-blue-600 tracking-tight italic">
+                          {order.totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} L
+                        </span>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                          {order.flowRate} L/HA
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-10 py-8">
+                      <StatusBadge status={order.status} />
+                    </td>
+                    <td className="px-10 py-8">
+                      <div className="flex items-center gap-3">
+                        <Calendar size={16} className="text-slate-300" />
+                        <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate}</span>
+                      </div>
+                    </td>
+                    <td className="px-10 py-8 text-right">
+                      <button className="p-3 text-slate-300 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95">
+                        <MoreHorizontal size={24} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
+                    Nenhuma ordem encontrada
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
         
         {/* Table Footer / Pagination */}
         <div className="p-10 border-t border-slate-50 bg-slate-50/30 flex justify-between items-center">
-           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">EXIBINDO 5 DE 1.240 ORDENS</span>
+           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+             EXIBINDO {filteredOrders.length} DE {orders.length} ORDENS
+           </span>
            <div className="flex gap-4">
-              <button className="px-10 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all">ANTERIOR</button>
-              <button className="px-10 py-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-900 hover:border-slate-400 transition-all shadow-sm">PRÓXIMA</button>
+              <button disabled className="px-10 py-4 text-[10px] font-black uppercase tracking-widest text-slate-300 cursor-not-allowed">ANTERIOR</button>
+              <button disabled className="px-10 py-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-300 cursor-not-allowed shadow-sm">PRÓXIMA</button>
            </div>
         </div>
       </div>
