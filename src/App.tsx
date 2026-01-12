@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, ClipboardList, Package, Truck, 
   Map as MapIcon, Calendar, Sprout, ShoppingCart, 
-  Beaker, LogOut, RefreshCw
+  Beaker, LogOut, RefreshCw, BarChart3
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './integrations/supabase/client';
@@ -14,11 +14,12 @@ import Reports from './components/Reports';
 import AreasFields from './components/AreasFields';
 import FleetManagement from './components/FleetManagement';
 import CalendarView from './components/CalendarView';
+import StatsView from './components/StatsView';
 import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import Login from './components/Login';
 
-import { ServiceOrder, OrderStatus, Insumo, PurchaseOrder, PurchaseOrderStatus, MasterInsumo, StockHistoryEntry } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry } from './types';
 
 // Componente Logo
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
@@ -62,7 +63,7 @@ const App: React.FC = () => {
     
     try {
       // Buscar Master Insumos
-      const { data: masterData, error: masterError } = await supabase
+      const { data: masterData } = await supabase
         .from('master_insumos')
         .select('*');
       
@@ -78,9 +79,8 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Estoque (Inventory) e fazer join manual simples se necessário
-      // Aqui vamos buscar a tabela inventory e cruzar com master_insumos e farms se precisarmos dos nomes
-      const { data: invData, error: invError } = await supabase
+      // Buscar Estoque
+      const { data: invData } = await supabase
         .from('inventory')
         .select(`
           *,
@@ -91,7 +91,7 @@ const App: React.FC = () => {
       if (invData) {
         const formattedInventory: Insumo[] = invData.map((item: any) => ({
           id: item.id,
-          masterId: item.master_insumo_id, // guardar referência
+          masterId: item.master_insumo_id,
           name: item.master_insumo?.name || 'Item Removido',
           activeIngredient: item.master_insumo?.active_ingredient || '-',
           unit: item.master_insumo?.unit || 'UN',
@@ -101,7 +101,7 @@ const App: React.FC = () => {
           physicalStock: Number(item.physical_stock),
           reservedQty: Number(item.reserved_qty),
           availableQty: Number(item.physical_stock) - Number(item.reserved_qty),
-          stock: Number(item.physical_stock), // mantendo compatibilidade
+          stock: Number(item.physical_stock),
           minStock: Number(item.min_stock)
         }));
         setInventory(formattedInventory);
@@ -118,7 +118,6 @@ const App: React.FC = () => {
     }
   }, [session]);
 
-  // Handlers
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
@@ -127,14 +126,8 @@ const App: React.FC = () => {
     fetchAllData();
   };
 
-  // Funções de Update (Mockadas temporariamente para manter compatibilidade visual até migrar tudo)
   const updateMasterInsumos = async (newData: MasterInsumo[]) => {
-    // Aqui deveríamos fazer o UPSERT no Supabase
-    // Por enquanto, atualizamos apenas o estado local para a UI responder
     setMasterInsumos(newData);
-    
-    // Exemplo de como salvar um novo item (se tiver ID novo gerado pelo front, é insert, senão update)
-    // Para implementação completa, o componente InsumoMaster precisa ser refatorado para chamar API
   };
 
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
@@ -153,13 +146,15 @@ const App: React.FC = () => {
         return (
           <OSKanban 
             orders={orders} 
-            onUpdateStatus={() => {}} // TODO: Implementar update no banco
+            onUpdateStatus={() => {}} 
             onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }}
             onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }}
           />
         );
       case 'calendar':
         return <div className="p-12 h-full"><CalendarView orders={orders} /></div>;
+      case 'stats':
+        return <div className="p-12 h-full"><StatsView /></div>;
       case 'inventory': 
         return (
           <div className="p-12 h-full">
@@ -229,6 +224,7 @@ const App: React.FC = () => {
         <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto custom-scrollbar">
           {[
             { id: 'dashboard', label: 'Página Inicial', icon: LayoutDashboard },
+            { id: 'stats', label: 'Estatísticas', icon: BarChart3 },
             { id: 'calendar', label: 'Calendário', icon: Calendar },
             { id: 'reports', label: 'Relatórios', icon: ClipboardList },
             { id: 'master_insumos', label: 'Insumos', icon: Beaker },
