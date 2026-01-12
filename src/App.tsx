@@ -154,7 +154,7 @@ const App: React.FC = () => {
       case 'calendar':
         return <div className="p-12 h-full"><CalendarView orders={orders} /></div>;
       case 'stats':
-        return <div className="p-12 h-full"><StatsView /></div>;
+        return <div className="p-12 h-full"><StatsView orders={orders} inventory={inventory} /></div>;
       case 'inventory': 
         return (
           <div className="p-12 h-full">

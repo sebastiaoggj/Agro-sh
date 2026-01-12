@@ -1,5 +1,5 @@
 {
-  "name": "agro-sh---erp-operacional",
+  "name": "agro-sh-erp",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -19,8 +19,8 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.2.2",
     "vite": "^5.2.0"
