@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   Tractor, 
@@ -34,28 +33,11 @@ interface Operator {
 }
 
 const FleetManagement: React.FC = () => {
-  // Dados mockados de fazendas (deveriam vir de um contexto global ou banco)
-  const FARMS = [
-    { id: 'f1', name: 'JATOBA/BURITI' },
-    { id: 'f2', name: 'SAO GERONIMO' },
-    { id: 'f3', name: 'SANTO AURELIO' },
-    { id: 'f4', name: 'ALIANCA' },
-    { id: 'f5', name: 'BOQUEIRAO' },
-    { id: 'f6', name: 'MANGA' }
-  ];
+  // Inicializando vazio para refletir o banco de dados
+  const FARMS: { id: string; name: string }[] = []; 
 
-  const [machines, setMachines] = useState<Machine[]>([
-    { id: 'm1', name: '4730 JA.', farmIds: ['f1'], farmNames: ['JATOBA/BURITI'], capacity: 3000 },
-    { id: 'm2', name: 'AVIAO PROPRIO', farmIds: ['f2', 'f6', 'f3', 'f4'], farmNames: ['SAO GERONIMO', 'MANGA', 'SANTO AURELIO', 'ALIANCA'], capacity: 600 },
-    { id: 'm3', name: 'BOMBA COSTAL', farmIds: ['f6', 'f3', 'f2', 'f4'], farmNames: ['MANGA', 'SANTO AURELIO', 'SAO GERONIMO', 'ALIANCA'], capacity: 20 },
-    { id: 'm4', name: 'DRONE', farmIds: ['f6', 'f3', 'f2', 'f5'], farmNames: ['MANGA', 'SANTO AURELIO', 'SAO GERONIMO', 'BOQUEIRAO'], capacity: 40 },
-  ]);
-
-  const [operators, setOperators] = useState<Operator[]>([
-    { id: 'o1', name: 'ANDRE S.A.', farmIds: ['f3'], farmNames: ['SANTO AURELIO'], createdAt: '11/12/2025' },
-    { id: 'o2', name: 'ARTHUR AL.', farmIds: ['f4'], farmNames: ['ALIANCA'], createdAt: '16/12/2025' },
-    { id: 'o3', name: 'BRANCO BO.', farmIds: ['f5'], farmNames: ['BOQUEIRAO'], createdAt: '16/12/2025' },
-  ]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [farmFilter, setFarmFilter] = useState('all');
@@ -190,40 +172,48 @@ const FleetManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-              {filteredMachines.map(m => (
-                <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
-                      <MapPin size={12} className="text-emerald-500 shrink-0" />
-                      {m.farmNames.join(', ') || 'Global'}
-                    </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg">
-                        <Tractor size={16} />
+              {filteredMachines.length > 0 ? (
+                filteredMachines.map(m => (
+                  <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
+                        <MapPin size={12} className="text-emerald-500 shrink-0" />
+                        {m.farmNames.join(', ') || 'Global'}
                       </div>
-                      <span className="font-bold text-slate-900 dark:text-slate-200">{m.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                      <Droplets size={16} className="text-blue-500" />
-                      <span className="font-black">{m.capacity} L</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => handleOpenModal('machine', m)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    </td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg">
+                          <Tractor size={16} />
+                        </div>
+                        <span className="font-bold text-slate-900 dark:text-slate-200">{m.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                        <Droplets size={16} className="text-blue-500" />
+                        <span className="font-black">{m.capacity} L</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleOpenModal('machine', m)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
+                          <Edit2 size={16} />
+                        </button>
+                        <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-8 py-10 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest italic">
+                    Nenhuma máquina cadastrada
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -254,40 +244,48 @@ const FleetManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-              {filteredOperators.map(o => (
-                <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
-                      <MapPin size={12} className="text-blue-500 shrink-0" />
-                      {o.farmNames.join(', ') || 'Global'}
-                    </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg">
-                        <Users size={16} />
+              {filteredOperators.length > 0 ? (
+                filteredOperators.map(o => (
+                  <tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
+                        <MapPin size={12} className="text-blue-500 shrink-0" />
+                        {o.farmNames.join(', ') || 'Global'}
                       </div>
-                      <span className="font-bold text-slate-900 dark:text-slate-200">{o.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-500">
-                      <Calendar size={16} />
-                      <span className="font-medium">{o.createdAt}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-5 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => handleOpenModal('operator', o)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
-                        <Edit2 size={16} />
-                      </button>
-                      <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    </td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg">
+                          <Users size={16} />
+                        </div>
+                        <span className="font-bold text-slate-900 dark:text-slate-200">{o.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-500">
+                        <Calendar size={16} />
+                        <span className="font-medium">{o.createdAt}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => handleOpenModal('operator', o)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
+                          <Edit2 size={16} />
+                        </button>
+                        <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-8 py-10 text-center text-slate-400 text-[10px] font-black uppercase tracking-widest italic">
+                    Nenhum operador cadastrado
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
@@ -326,7 +324,7 @@ const FleetManagement: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazendas (opcional)</label>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
-                  {FARMS.map(farm => (
+                  {FARMS.length > 0 ? FARMS.map(farm => (
                     <label key={farm.id} className="flex items-center gap-3 cursor-pointer group p-1">
                       <div 
                         onClick={() => handleToggleFarm(farm.id)}
@@ -336,7 +334,9 @@ const FleetManagement: React.FC = () => {
                       </div>
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300 group-hover:text-emerald-500 transition-colors">{farm.name}</span>
                     </label>
-                  ))}
+                  )) : (
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center py-4">Nenhuma fazenda cadastrada</p>
+                  )}
                 </div>
                 <p className="text-[9px] text-slate-500 italic mt-1 font-medium">Se nenhuma fazenda for selecionada, estará disponível para todas.</p>
               </div>
