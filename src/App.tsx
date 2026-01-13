@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
-  const [farmNames, setFarmNames] = useState<string[]>([]);
+  const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); // Mudança: guarda objetos completos
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
   // Estados mockados (ainda não migrados para o banco nesta etapa)
@@ -77,10 +77,10 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Todas as Fazendas
-      const { data: farmsData } = await supabase.from('farms').select('name').order('name');
+      // Buscar Todas as Fazendas (objetos completos)
+      const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
       if (farmsData) {
-        setFarmNames(farmsData.map(f => f.name));
+        setFarms(farmsData);
       }
 
       // Buscar Estoque
@@ -119,11 +119,13 @@ const App: React.FC = () => {
           orderNumber: item.order_number,
           supplier: item.supplier,
           productName: item.product_name,
+          masterInsumoId: item.master_insumo_id,
           farmName: item.farm_name,
+          farmId: item.farm_id,
           quantity: item.quantity,
           unit: item.unit,
           totalValue: item.total_value,
-          orderDate: item.order_date, // Formatar se necessário
+          orderDate: item.order_date,
           expectedDelivery: item.expected_delivery,
           status: item.status as PurchaseOrderStatus,
           invoiceNumber: item.invoice_number
@@ -150,11 +152,13 @@ const App: React.FC = () => {
         order_number: po.orderNumber,
         supplier: po.supplier,
         product_name: po.productName,
+        master_insumo_id: po.masterInsumoId,
         farm_name: po.farmName,
+        farm_id: po.farmId,
         quantity: po.quantity,
         unit: po.unit,
         total_value: po.totalValue,
-        order_date: po.orderDate ? new Date(po.orderDate.split('/').reverse().join('-')).toISOString() : new Date().toISOString(), // Ajuste de data simples
+        order_date: po.orderDate ? new Date(po.orderDate.split('/').reverse().join('-')).toISOString() : new Date().toISOString(),
         expected_delivery: po.expectedDelivery,
         status: po.status,
         user_id: session.user.id
@@ -170,7 +174,60 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
+    if (!session?.user) return;
     try {
+      // Se o status for RECEBIDO, precisamos dar entrada no estoque
+      if (status === PurchaseOrderStatus.RECEIVED) {
+        // 1. Buscar detalhes do pedido
+        const { data: po } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
+        if (!po) throw new Error("Pedido não encontrado");
+
+        // Precisamos dos IDs. Se o pedido for antigo e não tiver IDs, tentamos buscar pelo nome
+        let masterInsumoId = po.master_insumo_id;
+        let farmId = po.farm_id;
+
+        // Fallback: buscar IDs pelos nomes se não existirem
+        if (!masterInsumoId) {
+          const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
+          if (mi) masterInsumoId = mi.id;
+        }
+        if (!farmId) {
+          const { data: fm } = await supabase.from('farms').select('id').eq('name', po.farm_name).single();
+          if (fm) farmId = fm.id;
+        }
+
+        if (masterInsumoId && farmId) {
+          // 2. Verificar se já existe no inventário
+          const { data: existingInv } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('master_insumo_id', masterInsumoId)
+            .eq('farm_id', farmId)
+            .single();
+
+          if (existingInv) {
+            // Atualiza quantidade
+            await supabase.from('inventory').update({
+              physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
+            }).eq('id', existingInv.id);
+          } else {
+            // Insere novo item no inventário
+            await supabase.from('inventory').insert({
+              master_insumo_id: masterInsumoId,
+              farm_id: farmId,
+              physical_stock: po.quantity,
+              reserved_qty: 0,
+              min_stock: 0,
+              user_id: session.user.id
+            });
+          }
+        } else {
+          console.warn("Não foi possível identificar o insumo ou a fazenda para dar entrada automática.");
+          alert("Atenção: Não foi possível identificar automaticamente o insumo ou a fazenda para atualizar o estoque. Verifique se os nomes correspondem exatamente.");
+        }
+      }
+
+      // Atualizar status do pedido
       const { error } = await supabase
         .from('purchase_orders')
         .update({ status, ...extraData })
@@ -255,7 +312,7 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <PurchaseOrders 
               orders={purchaseOrders}
-              farms={farmNames} 
+              farms={farms} 
               masterInsumos={masterInsumos}
               onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)}
               onReceive={(id, supplier, nf) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, { supplier, invoice_number: nf })}

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ShoppingCart, Search, Filter, Plus, X, ChevronDown, 
@@ -10,7 +9,7 @@ import { PurchaseOrder, PurchaseOrderStatus, MasterInsumo } from '../types';
 
 interface PurchaseOrdersProps {
   orders: PurchaseOrder[];
-  farms: string[];
+  farms: { id: string, name: string }[]; // Agora recebemos objetos com ID
   masterInsumos: MasterInsumo[];
   onApprove: (id: string) => void;
   onReceive: (id: string, supplier: string, nf: string) => void;
@@ -39,14 +38,15 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
     invoiceNumber: ''
   });
 
-  const [formData, setFormData] = useState<Partial<PurchaseOrder & { unitPrice: number, selectedInsumoId: string }>>({
+  const [formData, setFormData] = useState<Partial<PurchaseOrder & { unitPrice: number, selectedInsumoId: string, selectedFarmId: string }>>({
     status: PurchaseOrderStatus.PENDING,
     unit: 'LT',
     farmName: '',
     quantity: 0,
     unitPrice: 0,
     totalValue: 0,
-    selectedInsumoId: ''
+    selectedInsumoId: '',
+    selectedFarmId: ''
   });
 
   useEffect(() => {
@@ -65,6 +65,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
         ...prev,
         selectedInsumoId: insumoId,
         productName: selected.name,
+        masterInsumoId: selected.id,
         unit: selected.unit,
         quantity: selected.defaultPurchaseQty || 0,
         unitPrice: selected.price || 0
@@ -74,9 +75,29 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
         ...prev,
         selectedInsumoId: '',
         productName: '',
+        masterInsumoId: undefined,
         unit: 'LT',
         quantity: 0,
         unitPrice: 0
+      }));
+    }
+  };
+
+  const handleFarmSelect = (farmId: string) => {
+    const selected = farms.find(f => f.id === farmId);
+    if (selected) {
+      setFormData(prev => ({
+        ...prev,
+        selectedFarmId: farmId,
+        farmId: selected.id,
+        farmName: selected.name
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        selectedFarmId: '',
+        farmId: undefined,
+        farmName: ''
       }));
     }
   };
@@ -105,7 +126,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
   };
 
   const handleSaveClick = () => {
-    if (!formData.farmName || !formData.productName) {
+    if (!formData.productName || !formData.farmName) {
       alert("Por favor, preencha o produto e a fazenda de destino.");
       return;
     }
@@ -114,7 +135,9 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
       orderNumber: `2026-PO${(orders.length + 1).toString().padStart(3, '0')}`,
       supplier: 'CATÁLOGO INTERNO',
       productName: (formData.productName || 'N/A').toUpperCase(),
+      masterInsumoId: formData.masterInsumoId,
       farmName: formData.farmName || '',
+      farmId: formData.farmId,
       quantity: Number(formData.quantity) || 0,
       unit: formData.unit || 'LT',
       totalValue: Number(formData.totalValue) || 0,
@@ -124,7 +147,7 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
     };
     onSave(newOrder);
     setIsModalOpen(false);
-    setFormData({ status: PurchaseOrderStatus.PENDING, unit: 'LT', farmName: '', quantity: 0, unitPrice: 0, totalValue: 0, selectedInsumoId: '' });
+    setFormData({ status: PurchaseOrderStatus.PENDING, unit: 'LT', farmName: '', quantity: 0, unitPrice: 0, totalValue: 0, selectedInsumoId: '', selectedFarmId: '' });
   };
 
   const openReceiveModal = (order: PurchaseOrder) => {
@@ -310,11 +333,11 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
                     <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
                     <select 
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase" 
-                      value={formData.farmName || ''} 
-                      onChange={(e) => setFormData({...formData, farmName: e.target.value})}
+                      value={formData.selectedFarmId || ''} 
+                      onChange={(e) => handleFarmSelect(e.target.value)}
                     >
                       <option value="">Selecione a Fazenda...</option>
-                      {farms.map(f => <option key={f} value={f}>{f}</option>)}
+                      {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                     </select>
                   </div>
                 </div>

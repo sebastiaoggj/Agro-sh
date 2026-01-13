@@ -1,4 +1,3 @@
-
 export enum OrderStatus {
   DRAFT = 'Rascunho',
   EMITTED = 'Emitida',
@@ -51,6 +50,8 @@ export interface Insumo extends MasterInsumo {
   availableQty: number;
   farm: string;
   minStock: number;
+  // Campos auxiliares para vincular corretamente
+  masterId?: string;
 }
 
 export interface StockHistoryEntry {
@@ -113,7 +114,9 @@ export interface PurchaseOrder {
   orderNumber: string;
   supplier: string;
   productName: string;
+  masterInsumoId?: string; // Novo campo
   farmName: string;
+  farmId?: string; // Novo campo
   quantity: number;
   unit: string;
   totalValue: number;
