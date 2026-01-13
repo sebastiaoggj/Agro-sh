@@ -685,7 +685,15 @@ const App: React.FC = () => {
         );
       case 'fleet': return <div className="p-12 h-full"><FleetManagement /></div>;
       case 'areas': return <div className="p-12 h-full"><AreasFields /></div>;
-      case 'reports': return <div className="p-12 h-full"><Reports orders={orders} /></div>;
+      case 'reports': return (
+        <div className="p-12 h-full">
+          <Reports 
+            orders={orders} 
+            onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }}
+            onDelete={handleDeleteOS}
+          />
+        </div>
+      );
       default: return null;
     }
   };

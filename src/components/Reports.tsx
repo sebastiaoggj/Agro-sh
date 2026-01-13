@@ -13,12 +13,19 @@ import {
   MapPin, 
   Hash,
   FileText,
-  Droplets
+  Droplets,
+  Printer,
+  Edit,
+  Trash2,
+  X
 } from 'lucide-react';
 import { OrderStatus, ServiceOrder } from '../types';
+import OSPrintLayout from './OSPrintLayout';
 
 interface ReportsProps {
   orders: ServiceOrder[];
+  onEdit: (order: ServiceOrder) => void;
+  onDelete: (id: string) => void;
 }
 
 const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
@@ -84,8 +91,10 @@ const MetricCard: React.FC<{ title: string, value: string, unit: string, icon: a
   </div>
 );
 
-const Reports: React.FC<ReportsProps> = ({ orders }) => {
+const Reports: React.FC<ReportsProps> = ({ orders, onEdit, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [orderToPrint, setOrderToPrint] = useState<ServiceOrder | null>(null);
 
   // Métricas calculadas com base nos dados reais
   const totalArea = orders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
@@ -102,8 +111,28 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
     );
   }, [orders, searchTerm]);
 
+  const handlePrint = (order: ServiceOrder) => {
+    setOrderToPrint(order);
+    setActiveMenuId(null);
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
+
+  const handleMenuClick = (id: string) => {
+    setActiveMenuId(activeMenuId === id ? null : id);
+  };
+
   return (
-    <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+    <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative">
+      {/* Backdrop for menu */}
+      {activeMenuId && (
+        <div className="fixed inset-0 z-30 cursor-default" onClick={() => setActiveMenuId(null)} />
+      )}
+
+      {/* Hidden Print Layout */}
+      {orderToPrint && <OSPrintLayout order={orderToPrint} />}
+
       {/* Page Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
@@ -179,8 +208,8 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white border border-slate-200 rounded-[3rem] overflow-hidden shadow-xl">
-        <div className="overflow-x-auto custom-scrollbar">
+      <div className="bg-white border border-slate-200 rounded-[3rem] overflow-hidden shadow-xl min-h-[500px]">
+        <div className="overflow-x-visible custom-scrollbar">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-black tracking-[0.2em] border-b border-slate-100">
@@ -236,13 +265,43 @@ const Reports: React.FC<ReportsProps> = ({ orders }) => {
                     <td className="px-10 py-8">
                       <div className="flex items-center gap-3">
                         <Calendar size={16} className="text-slate-300" />
-                        <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate}</span>
+                        <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
                       </div>
                     </td>
-                    <td className="px-10 py-8 text-right">
-                      <button className="p-3 text-slate-300 hover:text-slate-900 hover:bg-slate-100 rounded-2xl transition-all active:scale-95">
-                        <MoreHorizontal size={24} />
+                    <td className="px-10 py-8 text-right relative">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleMenuClick(order.id); }}
+                        className={`p-3 rounded-2xl transition-all active:scale-95 ${activeMenuId === order.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-300 hover:text-slate-900 hover:bg-slate-100'}`}
+                      >
+                        {activeMenuId === order.id ? <X size={20} /> : <MoreHorizontal size={20} />}
                       </button>
+
+                      {/* Dropdown Menu */}
+                      {activeMenuId === order.id && (
+                        <div className="absolute right-12 top-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl w-56 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                           <div className="p-1.5 space-y-0.5">
+                             <button 
+                              onClick={() => handlePrint(order)}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                             >
+                               <Printer size={16} /> Imprimir OS
+                             </button>
+                             <button 
+                              onClick={() => { onEdit(order); setActiveMenuId(null); }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                             >
+                               <Edit size={16} /> Editar Dados
+                             </button>
+                             <div className="h-px bg-slate-100 mx-2 my-1" />
+                             <button 
+                              onClick={() => { if(confirm('Excluir esta ordem?')) onDelete(order.id); }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                             >
+                               <Trash2 size={16} /> Excluir Registro
+                             </button>
+                           </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
