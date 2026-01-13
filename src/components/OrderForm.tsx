@@ -8,7 +8,7 @@ import {
   AlertCircle, ChevronLeft, CheckCircle2,
   Printer, Share2, FileText, LayoutDashboard,
   Sparkles, Check, Search as SearchIcon,
-  Loader2, FlaskConical
+  Loader2, FlaskConical, AlertTriangle
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -25,7 +25,7 @@ interface OrderFormProps {
   machines: Machine[];
   operators: { id: string, name: string }[];
   insumos: Insumo[];
-  crops: { id: string, name: string, variety: string }[]; // Novo prop
+  crops: { id: string, name: string, variety: string }[];
 }
 
 interface ExtendedOSItem extends OSItem {
@@ -42,7 +42,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   machines,
   operators,
   insumos,
-  crops // Recebendo culturas
+  crops
 }) => {
   const [step, setStep] = useState<'FORM' | 'SUMMARY' | 'SUCCESS'>('FORM');
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
@@ -80,15 +80,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }) || []
   );
 
-  // Computados para Culturas
   const uniqueCultures = useMemo(() => {
-    // Extrai nomes únicos de culturas
     const names = new Set(crops.map(c => c.name));
     return Array.from(names);
   }, [crops]);
 
   const availableVarieties = useMemo(() => {
-    // Filtra variedades baseada na cultura selecionada
     return crops.filter(c => c.name === formData.culture);
   }, [crops, formData.culture]);
 
@@ -105,18 +102,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const selectedMachine = useMemo(() => machines.find(m => m.id === formData.machineId), [formData.machineId, machines]);
   const selectedOperator = useMemo(() => operators.find(o => o.id === formData.operatorId), [formData.operatorId, operators]);
 
+  // --- LÓGICA DE CÁLCULO ---
   const stats = useMemo(() => {
     const area = selectedFields.reduce((sum, f) => sum + f.area, 0);
     const flow = Number(formData.flowRate) || 0;
     const tankCap = Number(formData.tankCapacity) || 0;
+    
     const totalVolume = area * flow;
     const haPerTank = flow > 0 ? tankCap / flow : 0;
+
     const numberOfTanksExact = tankCap > 0 ? totalVolume / tankCap : 0;
     const numberOfTanksFull = Math.floor(numberOfTanksExact);
     const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
+    const totalRefills = Math.ceil(numberOfTanksExact);
+    
     const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCap) : 0;
 
-    return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume };
+    return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume, totalRefills };
   }, [selectedFields, formData.flowRate, formData.tankCapacity]);
 
   useEffect(() => {
@@ -133,12 +135,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const qtyTotal = dose * stats.area;
       return { ...item, qtyPerTank, qtyTotal };
     });
+    
     const hasChanges = newItems.some((newItem, idx) => {
       const oldItem = items[idx];
       return Math.abs(newItem.qtyPerTank - oldItem.qtyPerTank) > 0.0001 || 
              Math.abs(newItem.qtyTotal - oldItem.qtyTotal) > 0.0001;
     });
-    if (hasChanges) setItems(newItems);
+
+    if (hasChanges) {
+      setItems(newItems);
+    }
   }, [stats.haPerTank, stats.area, items]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -146,7 +152,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     if (name === 'farmId') {
       setFormData(prev => ({ ...prev, farmId: value, fieldIds: [] }));
     } else if (name === 'culture') {
-      // Ao mudar cultura, limpa variedade
       setFormData(prev => ({ ...prev, culture: value, variety: '' }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
@@ -384,7 +389,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     </thead>
                     <tbody className="divide-y divide-amber-100">
                       {items.filter(i => i.insumoId).map((item, idx) => {
-                        // Regra de três simples: (QtdTanqueCheio / CapTanque) * VolumeParcial
                         const partialQty = (item.qtyPerTank / formData.tankCapacity) * stats.partialTankVolume;
                         return (
                           <tr key={idx}>
@@ -585,7 +589,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
           </div>
 
-          {/* Seção de Tecnologia de Aplicação - Atualizada */}
+          {/* Seção de Tecnologia de Aplicação */}
           <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 space-y-8">
             <div className="flex items-center gap-4 text-blue-600 border-b border-slate-200 pb-4">
               <Settings size={22} strokeWidth={2.5} />
@@ -615,8 +619,23 @@ const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
+            {/* Alerta de Validação Técnica */}
+            {(formData.flowRate > 0 && formData.speed && formData.pressure) && (
+              <div className="flex items-center gap-3 text-[10px] text-amber-700 bg-amber-50 p-4 rounded-2xl border border-amber-100 animate-in fade-in">
+                <div className="bg-amber-100 p-2 rounded-lg text-amber-600">
+                  <AlertTriangle size={16} />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-black uppercase tracking-wide">Validação de Segurança</span>
+                  <span className="font-medium mt-0.5">
+                    Certifique-se de que a pressão de <strong>{formData.pressure}</strong> é adequada para a vazão de <strong>{formData.flowRate} L/ha</strong> à velocidade de <strong>{formData.speed} km/h</strong> com o bico selecionado.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Resultados Automáticos (Read Only) */}
-            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-200">
                <div className="bg-blue-100/50 border border-blue-200 rounded-2xl p-4 flex flex-col justify-center">
                  <span className="text-[9px] font-black uppercase text-blue-400 tracking-widest">Autonomia (ha/Tanque)</span>
                  <span className="text-xl font-black text-blue-700 italic">{stats.haPerTank.toFixed(2)} ha</span>
@@ -626,6 +645,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
                  <span className="text-[9px] font-black uppercase text-emerald-500 tracking-widest">Volume Total da Calda</span>
                  <span className="text-xl font-black text-emerald-700 italic">{stats.totalVolume.toLocaleString('pt-BR')} Litros</span>
                  <p className="text-[9px] text-emerald-500 mt-1">Para área total de {stats.area.toFixed(2)} ha</p>
+               </div>
+               
+               {/* Novo Card de Planejamento de Tanques */}
+               <div className="bg-orange-100/50 border border-orange-200 rounded-2xl p-4 flex flex-col justify-center">
+                 <span className="text-[9px] font-black uppercase text-orange-500 tracking-widest">Reabastecimentos</span>
+                 <span className="text-lg font-black text-orange-700 italic leading-tight">
+                   {stats.numberOfTanksFull} Cheios
+                   {stats.hasPartialTank && <span className="text-orange-600/80 text-sm"> + 1 Parcial</span>}
+                 </span>
+                 <p className="text-[9px] text-orange-500 mt-1 font-bold">
+                   {stats.hasPartialTank 
+                     ? `(${stats.numberOfTanksFull}x ${formData.tankCapacity}L + 1x ${stats.partialTankVolume.toFixed(0)}L)` 
+                     : `Carga exata de ${formData.tankCapacity}L`}
+                 </p>
                </div>
             </div>
           </div>
@@ -642,13 +675,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
 
             <div className="space-y-6">
-              {items.length === 0 && (
-                <div className="text-center py-16 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
-                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Nenhum produto adicionado à calda</p>
-                </div>
-              )}
               {items.map((item, idx) => (
-                <div key={idx} className="bg-white border border-slate-200 rounded-[2rem] p-8 relative group animate-in slide-in-from-top-4 duration-300 shadow-sm hover:shadow-md transition-shadow">
+                <div key={idx} className="bg-white border border-slate-200 rounded-[2rem] p-8 relative group shadow-sm hover:shadow-md transition-shadow">
                   <button onClick={() => removeProduct(idx)} className="absolute top-6 right-6 text-slate-300 hover:text-red-500 transition-colors p-2 bg-slate-50 rounded-xl">
                     <Trash2 size={18} />
                   </button>
@@ -662,13 +690,18 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     </div>
                     <div className="md:col-span-1 space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Dose / ha</label>
-                      <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0.00" value={item.dosePerHa || ''} onChange={(e) => updateItem(idx, item.insumoId, Number(e.target.value))} />
+                      <div className="relative">
+                         <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0.00" value={item.dosePerHa || ''} onChange={(e) => updateItem(idx, item.insumoId, Number(e.target.value))} />
+                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">{item.unit || 'L/Kg'}</span>
+                      </div>
                     </div>
-                    <div className="md:col-span-1 flex flex-col items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    
+                    {/* Campos de Resultado Travados */}
+                    <div className="md:col-span-1 flex flex-col items-center bg-slate-100 p-4 rounded-xl border border-slate-200 opacity-80 cursor-not-allowed">
                       <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Carga/Tanque</span>
                       <span className="text-xs font-black text-slate-700">{item.qtyPerTank > 0 ? item.qtyPerTank.toFixed(2) : '-'}</span>
                     </div>
-                    <div className="md:col-span-1 flex flex-col items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                    <div className="md:col-span-1 flex flex-col items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100 opacity-80 cursor-not-allowed">
                       <span className="text-[9px] font-black uppercase text-emerald-600 tracking-widest mb-1">Total OS</span>
                       <span className="text-xs font-black text-emerald-700">{item.qtyTotal > 0 ? item.qtyTotal.toFixed(2) : '-'}</span>
                     </div>
