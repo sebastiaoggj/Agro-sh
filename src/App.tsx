@@ -19,7 +19,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import Login from './components/Login';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus } from './types';
 
 // Componente Logo
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
@@ -78,7 +78,7 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Fazendas
+      // Buscar Todas as Fazendas
       const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
       if (farmsData) {
         setFarms(farmsData);
@@ -95,13 +95,13 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Máquinas (Adaptando schema se necessário)
+      // Buscar Máquinas
       const { data: machinesData } = await supabase.from('machines').select('*');
       if (machinesData) {
         setMachines(machinesData.map(m => ({
           id: m.id,
           name: m.name,
-          type: 'Pulverizador Terrestre', // Default já que não temos coluna type ainda
+          type: 'Pulverizador Terrestre', 
           tankCapacity: m.capacity
         })));
       }
@@ -137,6 +137,41 @@ const App: React.FC = () => {
           minStock: Number(item.min_stock)
         }));
         setInventory(formattedInventory);
+      }
+
+      // Buscar Ordens de Serviço (Agora buscamos do banco)
+      const { data: osData } = await supabase.from('service_orders').select('*').order('created_at', { ascending: false });
+      if (osData) {
+        const formattedOrders: ServiceOrder[] = osData.map((o: any) => ({
+          id: o.id,
+          orderNumber: o.order_number,
+          farmId: o.farm_id,
+          farmName: o.farm_name || '',
+          fieldIds: o.field_ids || [],
+          fieldNames: o.field_names || [],
+          culture: o.culture,
+          variety: o.variety,
+          recommendationDate: o.recommendation_date,
+          maxApplicationDate: o.max_application_date,
+          machineType: o.machine_type,
+          machineId: o.machine_id,
+          machineName: o.machine_name || '',
+          operatorId: o.operator_id,
+          tankCapacity: o.tank_capacity,
+          flowRate: o.flow_rate,
+          totalArea: o.total_area,
+          totalVolume: o.total_volume,
+          status: o.status as OrderStatus,
+          items: o.items || [], // Items JSONB
+          // Campos opcionais/mockados se não existirem no DB ainda
+          nozzle: '',
+          pressure: '',
+          speed: '',
+          applicationType: '',
+          mandatoryPhrase: '',
+          observations: ''
+        }));
+        setOrders(formattedOrders);
       }
 
       // Buscar Histórico de Estoque
@@ -194,6 +229,81 @@ const App: React.FC = () => {
     }
   }, [session]);
 
+  // Handlers para Ordens de Serviço (ServiceOrders)
+  const handleSaveServiceOrder = async (order: ServiceOrder) => {
+    if (!session?.user) return;
+    try {
+      const payload = {
+        order_number: order.orderNumber,
+        farm_id: order.farmId,
+        farm_name: order.farmName,
+        field_ids: order.fieldIds,
+        field_names: order.fieldNames,
+        culture: order.culture,
+        variety: order.variety,
+        recommendation_date: order.recommendationDate,
+        max_application_date: order.maxApplicationDate,
+        machine_type: order.machineType,
+        machine_id: order.machineId,
+        machine_name: order.machineName,
+        operator_id: order.operatorId,
+        tank_capacity: order.tankCapacity,
+        flow_rate: order.flowRate,
+        total_area: order.totalArea,
+        total_volume: order.totalVolume,
+        status: order.status,
+        items: order.items,
+        user_id: session.user.id
+      };
+
+      // Se já existe ID, tenta atualizar, senão insere (assumindo que ID do front é temporário se for novo)
+      // Melhor verificar se é edição pelo ID. Se order.id for numérico (timestamp) é novo.
+      // Vou tentar insert, se der erro de PK (improvável com UUID) ou se eu tivesse lógica de update.
+      // Como o OrderForm gera IDs com Date.now() para novos, eles não são UUIDs válidos.
+      // O Supabase gera UUID. Então vou ignorar o ID do front no insert.
+      
+      if (editingOrder && editingOrder.id === order.id) {
+         // É atualização de uma ordem existente no banco (UUID)
+         const { error } = await supabase.from('service_orders').update(payload).eq('id', order.id);
+         if (error) throw error;
+      } else {
+         // É nova ordem
+         const { error } = await supabase.from('service_orders').insert(payload);
+         if (error) throw error;
+      }
+
+      setEditingOrder(null);
+      setActiveTab('dashboard');
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao salvar OS:", error);
+      alert("Erro ao salvar ordem de serviço.");
+    }
+  };
+
+  const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus) => {
+    try {
+      const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao atualizar status da OS:", error);
+      alert("Erro ao atualizar status.");
+    }
+  };
+
+  const handleDeleteOS = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço?")) return;
+    try {
+      const { error } = await supabase.from('service_orders').delete().eq('id', id);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao excluir OS:", error);
+      alert("Erro ao excluir ordem.");
+    }
+  };
+
   // Handlers para Pedidos de Compra
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
     if (!session?.user) return;
@@ -232,7 +342,15 @@ const App: React.FC = () => {
 
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
-        let inventoryId = null;
+
+        if (!masterInsumoId) {
+          const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
+          if (mi) masterInsumoId = mi.id;
+        }
+        if (!farmId) {
+          const { data: fm } = await supabase.from('farms').select('id').eq('name', po.farm_name).single();
+          if (fm) farmId = fm.id;
+        }
 
         if (masterInsumoId && farmId) {
           const { data: existingInv } = await supabase
@@ -242,13 +360,16 @@ const App: React.FC = () => {
             .eq('farm_id', farmId)
             .maybeSingle();
 
+          let inventoryId = null;
+
           if (existingInv) {
-            inventoryId = existingInv.id;
-            await supabase.from('inventory').update({
+            const { error: updateError } = await supabase.from('inventory').update({
               physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
             }).eq('id', existingInv.id);
+            if (updateError) throw updateError;
+            inventoryId = existingInv.id;
           } else {
-            const { data: newInv, error } = await supabase.from('inventory').insert({
+            const { data: newInv, error: insertError } = await supabase.from('inventory').insert({
               master_insumo_id: masterInsumoId,
               farm_id: farmId,
               physical_stock: po.quantity,
@@ -256,7 +377,7 @@ const App: React.FC = () => {
               min_stock: 0,
               user_id: session.user.id
             }).select().single();
-            if (error) throw error;
+            if (insertError) throw insertError;
             inventoryId = newInv.id;
           }
 
@@ -274,19 +395,16 @@ const App: React.FC = () => {
           alert("Estoque atualizado com sucesso!");
         } else {
           console.warn("Faltam dados para entrada automática.");
+          alert("ERRO: Dados de produto/fazenda incompletos.");
         }
       }
 
-      const { error } = await supabase
-        .from('purchase_orders')
-        .update({ status, ...extraData })
-        .eq('id', id);
-      
+      const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
       if (error) throw error;
       fetchAllData();
     } catch (error) {
       console.error("Erro ao atualizar status:", error);
-      alert("Erro ao atualizar pedido.");
+      alert("Erro ao processar atualização.");
     }
   };
 
@@ -326,7 +444,8 @@ const App: React.FC = () => {
         return (
           <OSKanban 
             orders={orders} 
-            onUpdateStatus={() => {}} 
+            onUpdateStatus={handleUpdateOSStatus} 
+            onDeleteOrder={handleDeleteOS}
             onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }}
             onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }}
           />
@@ -377,9 +496,8 @@ const App: React.FC = () => {
             <OrderForm 
               initialData={editingOrder} 
               existingOrders={orders}
-              onSave={(order) => { setOrders([...orders, order]); setActiveTab('dashboard'); }} 
+              onSave={handleSaveServiceOrder} 
               onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} 
-              // Passing dynamic data
               farms={farms}
               fields={fields}
               machines={machines}

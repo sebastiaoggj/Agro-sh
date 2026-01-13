@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Play, 
@@ -82,7 +81,7 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
                <span className="text-[10px] font-black uppercase tracking-widest">Talhões:</span>
              </div>
              <div className="flex flex-wrap gap-1">
-               {order.fieldNames.map((f, i) => (
+               {order.fieldNames && order.fieldNames.map((f, i) => (
                  <span key={i} className="bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border border-slate-100">{f}</span>
                ))}
              </div>
@@ -91,7 +90,7 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Área Total</span>
              <div className="flex items-center gap-1.5">
                 <Hash size={14} className="text-slate-300" />
-                <span className="text-lg font-black text-slate-900 tracking-tighter">{order.totalArea.toFixed(2)} ha</span>
+                <span className="text-lg font-black text-slate-900 tracking-tighter">{order.totalArea?.toFixed(2)} ha</span>
              </div>
           </div>
         </div>
@@ -143,7 +142,16 @@ const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatus
       </div>
     </div>
     <div className="flex-1 space-y-6 overflow-y-auto px-2 custom-scrollbar pb-10">
-      {orders.map(order => <OSCard key={order.id} order={order} onStatusChange={onStatusChange} onFinalizeClick={onFinalizeClick} onEditClick={onEditOrder} onCancelClick={onCancelOrder} />)}
+      {orders.map((order: ServiceOrder) => (
+        <OSCard 
+          key={order.id} 
+          order={order} 
+          onStatusChange={onStatusChange} 
+          onFinalizeClick={onFinalizeClick} 
+          onEditClick={onEditOrder} 
+          onCancelClick={onCancelOrder} 
+        />
+      ))}
       {orders.length === 0 && <div className="bg-white/40 border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center flex flex-col items-center justify-center gap-5"><Layers size={56} className="text-slate-200" /><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Painel Vazio</p></div>}
     </div>
   </div>
@@ -154,9 +162,10 @@ interface OSKanbanProps {
   onUpdateStatus: (id: string, newStatus: OrderStatus, leftovers?: Record<string, number>) => void;
   onEditOrder: (order: ServiceOrder) => void;
   onCreateOrder: () => void;
+  onDeleteOrder: (id: string) => void;
 }
 
-const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder }) => {
+const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder, onDeleteOrder }) => {
   const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
   const [hasLeftovers, setHasLeftovers] = useState<boolean | null>(null);
@@ -199,12 +208,12 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
           <div className="bg-white border border-slate-200 px-8 py-4 rounded-[2rem] flex items-center gap-8 shadow-sm">
              <div className="flex flex-col">
                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">DATA ATUAL</span>
-               <span className="text-base font-black text-emerald-600 italic mt-1">12/01/2026</span>
+               <span className="text-base font-black text-emerald-600 italic mt-1">{new Date().toLocaleDateString('pt-BR')}</span>
              </div>
              <div className="w-px h-10 bg-slate-100" />
              <div className="flex flex-col">
-               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">SINCRONIZADO</span>
-               <span className="text-base font-black text-slate-800 mt-1">08:57</span>
+               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">ORDENS ATIVAS</span>
+               <span className="text-base font-black text-slate-800 mt-1">{orders.length}</span>
              </div>
           </div>
         </div>
@@ -226,10 +235,15 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
         <div className="flex gap-10 h-full min-w-max pb-4">
           {columns.map(col => (
             <KanbanColumn 
-              key={col.status} title={col.title} count={orders.filter(o => o.status === col.status).length} 
-              totalArea={orders.filter(o => o.status === col.status).reduce((acc, curr) => acc + curr.totalArea, 0)} 
-              orders={orders.filter(o => o.status === col.status)} onStatusChange={onUpdateStatus} 
-              onFinalizeClick={handleFinalizeClick} onEditOrder={onEditOrder} onCancelOrder={() => {}} 
+              key={col.status} 
+              title={col.title} 
+              count={orders.filter(o => o.status === col.status).length} 
+              totalArea={orders.filter(o => o.status === col.status).reduce((acc, curr) => acc + (curr.totalArea || 0), 0)} 
+              orders={orders.filter(o => o.status === col.status)} 
+              onStatusChange={onUpdateStatus} 
+              onFinalizeClick={handleFinalizeClick} 
+              onEditOrder={onEditOrder} 
+              onCancelOrder={(order: ServiceOrder) => onDeleteOrder(order.id)} 
             />
           ))}
         </div>
@@ -263,7 +277,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
                   </div>
                   
                   <div className="space-y-4">
-                    {selectedOrder.items.map((item) => (
+                    {selectedOrder.items && selectedOrder.items.map((item) => (
                       <div key={item.insumoId} className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-100 group hover:border-emerald-200 transition-all">
                         <div className="flex items-center gap-4">
                           <div className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 group-hover:text-emerald-500 transition-colors">
@@ -288,33 +302,6 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
                         </div>
                       </div>
                     ))}
-                  </div>
-
-                  <div className="flex justify-between items-center p-8 bg-slate-900 text-white rounded-[2.5rem] shadow-xl border border-slate-800">
-                    <div className="flex items-center gap-5">
-                      <div className="p-3 bg-white/10 rounded-2xl border border-white/5">
-                        <Droplets size={28} className="text-emerald-400" />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Resumo Operacional</p>
-                        <h5 className="text-xs font-black uppercase italic leading-none">Saída Total (Calda/Mix)</h5>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-4xl font-black tracking-tighter italic leading-none">
-                        {selectedOrder.totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} <span className="text-[10px] not-italic text-slate-400 ml-1 uppercase">Litros</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-[2rem] flex items-center gap-5">
-                    <div className="p-3 bg-emerald-500 text-white rounded-2xl shadow-lg shadow-emerald-500/20">
-                      <PackageCheck size={24} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Procedimento Lean</p>
-                      <p className="text-[11px] text-emerald-700 font-bold leading-relaxed">As quantidades informadas retornarão automaticamente ao inventário físico da propriedade.</p>
-                    </div>
                   </div>
                 </div>
               )}
