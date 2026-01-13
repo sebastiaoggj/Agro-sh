@@ -611,6 +611,7 @@ const App: React.FC = () => {
             onDeleteOrder={handleDeleteOS}
             onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }}
             onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }}
+            onMakePurchaseClick={() => setActiveTab('purchases')}
           />
         );
       case 'calendar':

@@ -21,7 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   PackageCheck,
-  Undo2
+  Undo2,
+  ShoppingCart
 } from 'lucide-react';
 import { ServiceOrder, OrderStatus } from '../types';
 
@@ -31,9 +32,10 @@ interface OSCardProps {
   onFinalizeClick: (order: ServiceOrder) => void;
   onEditClick: (order: ServiceOrder) => void;
   onCancelClick: (order: ServiceOrder) => void;
+  onMakePurchaseClick: (order: ServiceOrder) => void;
 }
 
-const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick, onEditClick, onCancelClick }) => {
+const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick, onEditClick, onCancelClick, onMakePurchaseClick }) => {
   const getStatusBadgeStyle = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.EMITTED: return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -102,11 +104,25 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
         <span className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] italic">{order.applicationType}</span>
       </div>
       <div className="grid grid-cols-3 gap-3 pt-2">
+        {/* Lógica de Botões Principais */}
+        
+        {/* Caso 1: Ordem Emitida (Pronta para iniciar) */}
+        {order.status === OrderStatus.EMITTED && (
+           <button onClick={() => onStatusChange(order.id, OrderStatus.IN_PROGRESS)} className="bg-[#f26522] hover:bg-orange-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
+             <Play size={16} fill="currentColor" /> Iniciar
+           </button>
+        )}
+
+        {/* Caso 2: Aguardando Produto (Fazer Pedido) */}
+        {order.status === OrderStatus.AWAITING_PRODUCT && (
+           <button onClick={() => onMakePurchaseClick(order)} className="bg-amber-400 hover:bg-amber-500 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95 shadow-amber-500/20">
+             <ShoppingCart size={16} /> Comprar
+           </button>
+        )}
+
+        {/* Botões Secundários (Editar/Cancelar) para Emitida ou Aguardando */}
         {(order.status === OrderStatus.EMITTED || order.status === OrderStatus.AWAITING_PRODUCT) && (
           <>
-            <button onClick={() => onStatusChange(order.id, OrderStatus.IN_PROGRESS)} className="bg-[#f26522] hover:bg-orange-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
-              <Play size={16} fill="currentColor" /> Iniciar
-            </button>
             <button onClick={() => onEditClick(order)} className="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all active:scale-95 shadow-sm">
               <Edit3 size={16} /> Editar
             </button>
@@ -115,6 +131,8 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
             </button>
           </>
         )}
+
+        {/* Caso 3: Em Aplicação */}
         {order.status === OrderStatus.IN_PROGRESS && (
           <>
             <button onClick={() => onFinalizeClick(order)} className="col-span-2 bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
@@ -130,7 +148,7 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
   );
 };
 
-const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatusChange, onFinalizeClick, onEditOrder, onCancelOrder }) => (
+const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatusChange, onFinalizeClick, onEditOrder, onCancelOrder, onMakePurchaseClick }) => (
   <div className="flex flex-col h-full min-w-[380px] max-w-[440px] bg-slate-50/50 rounded-[2.5rem] p-4 border border-slate-100 text-slate-900">
     <div className="flex items-center justify-between mb-6 px-6 py-4 bg-white/50 backdrop-blur rounded-3xl border border-white/50 shadow-sm">
       <div className="flex items-center gap-3">
@@ -149,7 +167,8 @@ const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatus
           onStatusChange={onStatusChange} 
           onFinalizeClick={onFinalizeClick} 
           onEditClick={onEditOrder} 
-          onCancelClick={onCancelOrder} 
+          onCancelClick={onCancelOrder}
+          onMakePurchaseClick={onMakePurchaseClick}
         />
       ))}
       {orders.length === 0 && <div className="bg-white/40 border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center flex flex-col items-center justify-center gap-5"><Layers size={56} className="text-slate-200" /><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Painel Vazio</p></div>}
@@ -163,9 +182,10 @@ interface OSKanbanProps {
   onEditOrder: (order: ServiceOrder) => void;
   onCreateOrder: () => void;
   onDeleteOrder: (id: string) => void;
+  onMakePurchaseClick: (order: ServiceOrder) => void;
 }
 
-const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder, onDeleteOrder }) => {
+const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder, onDeleteOrder, onMakePurchaseClick }) => {
   const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
   const [hasLeftovers, setHasLeftovers] = useState<boolean | null>(null);
@@ -243,7 +263,8 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
               onStatusChange={onUpdateStatus} 
               onFinalizeClick={handleFinalizeClick} 
               onEditOrder={onEditOrder} 
-              onCancelOrder={(order: ServiceOrder) => onDeleteOrder(order.id)} 
+              onCancelOrder={(order: ServiceOrder) => onDeleteOrder(order.id)}
+              onMakePurchaseClick={onMakePurchaseClick}
             />
           ))}
         </div>
