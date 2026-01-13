@@ -95,27 +95,27 @@ const StatsView: React.FC<StatsViewProps> = ({ orders, inventory }) => {
 
   // 4. Performance por Máquina
   const machinePerformance = useMemo(() => {
-    const grouped = orders.reduce((acc, order) => {
+    const grouped = orders.reduce((acc: Record<string, number>, order) => {
       const machine = order.machineName || 'N/A';
       acc[machine] = (acc[machine] || 0) + order.totalArea;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     return Object.entries(grouped)
-      .map(([name, ha]) => ({ name, ha }))
+      .map(([name, ha]) => ({ name, ha: Number(ha) }))
       .sort((a, b) => b.ha - a.ha); // Maior área primeiro
   }, [orders]);
 
   // 5. Mix de Culturas
   const cultureData = useMemo(() => {
-    const grouped = orders.reduce((acc, order) => {
+    const grouped = orders.reduce((acc: Record<string, number>, order) => {
       const cult = order.culture || 'N/A';
       acc[cult] = (acc[cult] || 0) + order.totalArea;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
 
     return Object.entries(grouped)
-      .map(([name, area]) => ({ name, area }))
+      .map(([name, area]) => ({ name, area: Number(area) }))
       .sort((a, b) => b.area - a.area);
   }, [orders]);
 

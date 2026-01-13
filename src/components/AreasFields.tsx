@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sprout, 
   Map as MapIcon, 
@@ -12,6 +12,7 @@ import {
   Save,
   AlertTriangle
 } from 'lucide-react';
+import { supabase } from '../integrations/supabase/client';
 
 interface AreaSectionProps {
   title: string;
@@ -94,7 +95,6 @@ const AreaSection: React.FC<AreaSectionProps> = ({
 };
 
 const AreasFields: React.FC = () => {
-  // Inicializando estados vazios para limpar os dados de exemplo
   const [crops, setCrops] = useState<any[]>([]);
   const [farms, setFarms] = useState<any[]>([]);
   const [fields, setFields] = useState<any[]>([]);
@@ -105,6 +105,60 @@ const AreasFields: React.FC = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [itemToDelete, setItemToDelete] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
+  const [loading, setLoading] = useState(false);
+
+  // Carregar dados ao montar o componente
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Buscar Culturas
+      const { data: cropsData } = await supabase
+        .from('crops')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (cropsData) setCrops(cropsData);
+
+      // Buscar Fazendas
+      const { data: farmsData } = await supabase
+        .from('farms')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (farmsData) {
+        const mappedFarms = farmsData.map(f => ({
+          ...f,
+          area: f.total_area // Mapeando total_area do banco para area no front
+        }));
+        setFarms(mappedFarms);
+      }
+
+      // Buscar Talhões
+      const { data: fieldsData } = await supabase
+        .from('fields')
+        .select(`
+          *,
+          farm:farms(name)
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (fieldsData) {
+        const mappedFields = fieldsData.map((f: any) => ({
+          ...f,
+          farmName: f.farm?.name
+        }));
+        setFields(mappedFields);
+      }
+
+    } catch (error) {
+      console.error('Erro ao buscar dados:', error);
+    }
+  };
 
   const handleOpenModal = (type: 'crop' | 'farm' | 'field', item: any = null) => {
     setModalType(type);
@@ -119,45 +173,91 @@ const AreasFields: React.FC = () => {
     setConfirmDeleteOpen(true);
   };
 
-  const handleSave = () => {
-    if (modalType === 'crop') {
-      if (editingItem) {
-        setCrops(crops.map(c => c.id === editingItem.id ? { ...c, ...formData } : c));
-      } else {
-        setCrops([...crops, { ...formData, id: Date.now().toString(), color: 'text-emerald-500' }]);
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const userId = user.id;
+
+      if (modalType === 'crop') {
+        const payload = {
+          name: formData.name,
+          variety: formData.variety,
+          color: 'text-emerald-500',
+          user_id: userId
+        };
+
+        if (editingItem) {
+          await supabase.from('crops').update(payload).eq('id', editingItem.id);
+        } else {
+          await supabase.from('crops').insert(payload);
+        }
+      } 
+      else if (modalType === 'farm') {
+        const payload = {
+          name: formData.name,
+          location: formData.location,
+          total_area: formData.area, // Mapeando para o nome correto da coluna no DB
+          user_id: userId
+        };
+
+        if (editingItem) {
+          await supabase.from('farms').update(payload).eq('id', editingItem.id);
+        } else {
+          await supabase.from('farms').insert(payload);
+        }
+      } 
+      else if (modalType === 'field') {
+        const payload = {
+          name: formData.name,
+          farm_id: formData.farmId,
+          area: formData.area,
+          user_id: userId
+        };
+
+        if (editingItem) {
+          await supabase.from('fields').update(payload).eq('id', editingItem.id);
+        } else {
+          await supabase.from('fields').insert(payload);
+        }
       }
-    } else if (modalType === 'farm') {
-      if (editingItem) {
-        setFarms(farms.map(f => f.id === editingItem.id ? { ...f, ...formData } : f));
-        setFields(fields.map(fld => fld.farmId === editingItem.id ? { ...fld, farmName: formData.name } : fld));
-      } else {
-        setFarms([...farms, { ...formData, id: Date.now().toString() }]);
-      }
-    } else if (modalType === 'field') {
-      const selectedFarm = farms.find(f => f.id === formData.farmId);
-      const dataWithFarmName = { ...formData, farmName: selectedFarm?.name || '' };
-      
-      if (editingItem) {
-        setFields(fields.map(f => f.id === editingItem.id ? { ...f, ...dataWithFarmName } : f));
-      } else {
-        setFields([...fields, { ...dataWithFarmName, id: Date.now().toString() }]);
-      }
+
+      await fetchData(); // Recarregar dados
+      setModalOpen(false);
+      setFormData({});
+      setEditingItem(null);
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
+      alert("Erro ao salvar dados. Verifique sua conexão.");
+    } finally {
+      setLoading(false);
     }
-    setModalOpen(false);
   };
 
-  const executeDelete = () => {
+  const executeDelete = async () => {
     if (!itemToDelete || !modalType) return;
+    setLoading(true);
 
-    if (modalType === 'crop') setCrops(crops.filter(c => c.id !== itemToDelete.id));
-    if (modalType === 'farm') {
-      setFarms(farms.filter(f => f.id !== itemToDelete.id));
-      setFields(fields.filter(fld => fld.farmId !== itemToDelete.id));
+    try {
+      if (modalType === 'crop') {
+        await supabase.from('crops').delete().eq('id', itemToDelete.id);
+      } else if (modalType === 'farm') {
+        await supabase.from('farms').delete().eq('id', itemToDelete.id);
+      } else if (modalType === 'field') {
+        await supabase.from('fields').delete().eq('id', itemToDelete.id);
+      }
+
+      await fetchData();
+      setConfirmDeleteOpen(false);
+      setItemToDelete(null);
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      alert("Erro ao excluir item.");
+    } finally {
+      setLoading(false);
     }
-    if (modalType === 'field') setFields(fields.filter(f => f.id !== itemToDelete.id));
-
-    setConfirmDeleteOpen(false);
-    setItemToDelete(null);
   };
 
   return (
@@ -368,15 +468,17 @@ const AreasFields: React.FC = () => {
               <button 
                 onClick={() => setModalOpen(false)}
                 className="flex-1 py-5 rounded-2xl text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-all"
+                disabled={loading}
               >
                 Cancelar
               </button>
               <button 
                 onClick={handleSave}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-[0.98] uppercase text-xs tracking-widest"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-[0.98] uppercase text-xs tracking-widest disabled:opacity-50"
+                disabled={loading}
               >
                 <Save size={20} />
-                SALVAR DADOS
+                {loading ? 'SALVANDO...' : 'SALVAR DADOS'}
               </button>
             </div>
           </div>
@@ -402,13 +504,15 @@ const AreasFields: React.FC = () => {
             <div className="p-8 bg-slate-50 flex flex-col gap-4 border-t border-slate-100">
               <button 
                 onClick={executeDelete}
-                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-red-500/20 transition-all active:scale-95 text-xs uppercase tracking-widest"
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-red-500/20 transition-all active:scale-95 text-xs uppercase tracking-widest disabled:opacity-50"
+                disabled={loading}
               >
-                SIM, EXCLUIR ITEM
+                {loading ? 'EXCLUINDO...' : 'SIM, EXCLUIR ITEM'}
               </button>
               <button 
                 onClick={() => setConfirmDeleteOpen(false)}
                 className="w-full py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 rounded-2xl transition-all"
+                disabled={loading}
               >
                 NÃO, MANTER CADASTRO
               </button>
