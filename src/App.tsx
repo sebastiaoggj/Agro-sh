@@ -19,7 +19,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import Login from './components/Login';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus } from './types';
 
 // Componente Logo
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
@@ -38,10 +38,10 @@ const App: React.FC = () => {
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
-  const [farmNames, setFarmNames] = useState<string[]>([]); // Nova lista de nomes de fazendas
+  const [farmNames, setFarmNames] = useState<string[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
   // Estados mockados (ainda não migrados para o banco nesta etapa)
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
 
   // 1. Gerenciar Sessão
@@ -64,10 +64,7 @@ const App: React.FC = () => {
     
     try {
       // Buscar Master Insumos
-      const { data: masterData } = await supabase
-        .from('master_insumos')
-        .select('*');
-      
+      const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
         setMasterInsumos(masterData.map(item => ({
           id: item.id,
@@ -80,12 +77,8 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Todas as Fazendas (para dropdowns)
-      const { data: farmsData } = await supabase
-        .from('farms')
-        .select('name')
-        .order('name');
-      
+      // Buscar Todas as Fazendas
+      const { data: farmsData } = await supabase.from('farms').select('name').order('name');
       if (farmsData) {
         setFarmNames(farmsData.map(f => f.name));
       }
@@ -93,11 +86,7 @@ const App: React.FC = () => {
       // Buscar Estoque
       const { data: invData } = await supabase
         .from('inventory')
-        .select(`
-          *,
-          master_insumo:master_insumos(name, active_ingredient, unit, category, price),
-          farm:farms(name)
-        `);
+        .select(`*, master_insumo:master_insumos(name, active_ingredient, unit, category, price), farm:farms(name)`);
 
       if (invData) {
         const formattedInventory: Insumo[] = invData.map((item: any) => ({
@@ -118,6 +107,30 @@ const App: React.FC = () => {
         setInventory(formattedInventory);
       }
 
+      // Buscar Pedidos de Compra
+      const { data: poData } = await supabase
+        .from('purchase_orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (poData) {
+        const formattedPOs: PurchaseOrder[] = poData.map((item: any) => ({
+          id: item.id,
+          orderNumber: item.order_number,
+          supplier: item.supplier,
+          productName: item.product_name,
+          farmName: item.farm_name,
+          quantity: item.quantity,
+          unit: item.unit,
+          totalValue: item.total_value,
+          orderDate: item.order_date, // Formatar se necessário
+          expectedDelivery: item.expected_delivery,
+          status: item.status as PurchaseOrderStatus,
+          invoiceNumber: item.invoice_number
+        }));
+        setPurchaseOrders(formattedPOs);
+      }
+
     } catch (error) {
       console.error("Erro ao carregar dados:", error);
     }
@@ -128,6 +141,60 @@ const App: React.FC = () => {
       fetchAllData();
     }
   }, [session]);
+
+  // Handlers para Pedidos de Compra
+  const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
+    if (!session?.user) return;
+    try {
+      const payload = {
+        order_number: po.orderNumber,
+        supplier: po.supplier,
+        product_name: po.productName,
+        farm_name: po.farmName,
+        quantity: po.quantity,
+        unit: po.unit,
+        total_value: po.totalValue,
+        order_date: po.orderDate ? new Date(po.orderDate.split('/').reverse().join('-')).toISOString() : new Date().toISOString(), // Ajuste de data simples
+        expected_delivery: po.expectedDelivery,
+        status: po.status,
+        user_id: session.user.id
+      };
+
+      const { error } = await supabase.from('purchase_orders').insert(payload);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao salvar pedido:", error);
+      alert("Erro ao salvar pedido.");
+    }
+  };
+
+  const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
+    try {
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({ status, ...extraData })
+        .eq('id', id);
+      
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao atualizar status:", error);
+      alert("Erro ao atualizar pedido.");
+    }
+  };
+
+  const handleDeletePO = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este pedido?")) return;
+    try {
+      const { error } = await supabase.from('purchase_orders').delete().eq('id', id);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      console.error("Erro ao excluir pedido:", error);
+      alert("Erro ao excluir pedido.");
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -188,12 +255,12 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <PurchaseOrders 
               orders={purchaseOrders}
-              farms={farmNames} // Usando a lista completa de fazendas do banco
+              farms={farmNames} 
               masterInsumos={masterInsumos}
-              onApprove={() => {}}
-              onReceive={() => {}}
-              onSave={(po) => setPurchaseOrders(prev => [po, ...prev])}
-              onDelete={() => {}}
+              onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)}
+              onReceive={(id, supplier, nf) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, { supplier, invoice_number: nf })}
+              onSave={handleSavePurchaseOrder}
+              onDelete={handleDeletePO}
               onRepeat={() => {}}
             />
           </div>
