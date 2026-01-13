@@ -4,7 +4,8 @@ import {
   ArrowDownCircle, ArrowLeftRight, MapPin, 
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
-  User, ClipboardList, MinusCircle
+  User, ClipboardList, MinusCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -31,6 +32,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const [formReason, setFormReason] = useState('');
   const [formDestFarmId, setFormDestFarmId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fixingReserves, setFixingReserves] = useState(false);
 
   const filteredItems = useMemo(() => {
     return stockProp.filter(item => {
@@ -52,6 +54,24 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const handleHistoryClick = (item: Insumo) => {
     setSelectedItemForHistory(item);
     setActiveActionModal('HISTORICO');
+  };
+
+  // Função para recalcular reservas
+  const handleFixReserves = async () => {
+    if (!confirm("Isso irá recalcular todas as quantidades reservadas baseando-se apenas nas Ordens 'Emitida'. Deseja continuar?")) return;
+    
+    setFixingReserves(true);
+    try {
+      const { error } = await supabase.rpc('recalculate_stock_reservations');
+      if (error) throw error;
+      alert("Reservas recalculadas e corrigidas com sucesso!");
+      onRefresh();
+    } catch (error) {
+      console.error("Erro ao recalcular:", error);
+      alert("Erro ao corrigir reservas.");
+    } finally {
+      setFixingReserves(false);
+    }
   };
 
   const handleActionSubmit = async () => {
@@ -209,7 +229,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       }
 
       onRefresh();
-      // Chama o callback de mudança de estoque para disparar a verificação de ordens
       if (onStockChange && (activeActionModal === 'ENTRADA_MANUAL' || activeActionModal === 'TRANSFERIR')) {
         onStockChange();
       }
@@ -238,6 +257,15 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
               onChange={(e) => setSearchProduct(e.target.value)}
             />
           </div>
+          <button 
+            onClick={handleFixReserves}
+            disabled={fixingReserves}
+            className="px-6 bg-slate-100 hover:bg-slate-200 text-slate-500 border border-slate-200 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all"
+            title="Corrigir inconsistências de reservas"
+          >
+            <ShieldCheck size={18} />
+            {fixingReserves ? 'CORRIGINDO...' : 'RECALCULAR RESERVAS'}
+          </button>
         </div>
 
         <div className="space-y-2">
