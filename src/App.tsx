@@ -126,10 +126,6 @@ const App: React.FC = () => {
     fetchAllData();
   };
 
-  const updateMasterInsumos = async (newData: MasterInsumo[]) => {
-    setMasterInsumos(newData);
-  };
-
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
 
   if (loading) {
@@ -172,7 +168,7 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <InsumoMaster 
               insumos={masterInsumos} 
-              onUpdate={updateMasterInsumos} 
+              onRefresh={handleRefresh} 
             />
           </div>
         );

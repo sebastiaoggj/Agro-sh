@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   Beaker, Search, Plus, Edit2, Trash2, X, Save, 
@@ -6,19 +5,22 @@ import {
   ShoppingCart, DollarSign
 } from 'lucide-react';
 import { MasterInsumo } from '../types';
+import { supabase } from '../integrations/supabase/client';
 
 const CATEGORIES = ['HERBICIDA', 'FUNGICIDA', 'INSETICIDA', 'ACARICIDA', 'ADJUVANTE', 'FERTILIZANTE', 'NUTRIÇÃO FOLIAR', 'OUTROS'];
 const UNITS = ['LT', 'KG', 'UN', 'PCT', 'GAL', 'TON'];
 
 interface InsumoMasterProps {
   insumos: MasterInsumo[];
-  onUpdate: (data: MasterInsumo[]) => void;
+  onRefresh: () => void;
 }
 
-const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onUpdate }) => {
+const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MasterInsumo | null>(null);
+  const [loading, setLoading] = useState(false);
+  
   const [formData, setFormData] = useState<Partial<MasterInsumo>>({
     name: '',
     activeIngredient: '',
@@ -46,32 +48,66 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onUpdate }) => {
     setIsModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.activeIngredient) {
       alert("Por favor, preencha o nome e o princípio ativo.");
       return;
     }
 
-    if (editingItem) {
-      onUpdate(insumos.map(i => i.id === editingItem.id ? { ...i, ...formData } as MasterInsumo : i));
-    } else {
-      const newItem: MasterInsumo = {
-        id: Date.now().toString(),
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const payload = {
         name: formData.name.toUpperCase(),
-        activeIngredient: formData.activeIngredient.toUpperCase(),
+        active_ingredient: formData.activeIngredient.toUpperCase(),
         unit: formData.unit || 'LT',
         category: formData.category || 'OUTROS',
-        defaultPurchaseQty: formData.defaultPurchaseQty || 0,
-        price: formData.price || 0
+        default_purchase_qty: formData.defaultPurchaseQty || 0,
+        price: formData.price || 0,
+        user_id: user.id
       };
-      onUpdate([newItem, ...insumos]);
+
+      if (editingItem) {
+        const { error } = await supabase
+          .from('master_insumos')
+          .update(payload)
+          .eq('id', editingItem.id);
+        
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('master_insumos')
+          .insert(payload);
+          
+        if (error) throw error;
+      }
+
+      onRefresh(); // Atualiza a lista global
+      setIsModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao salvar insumo:", error);
+      alert("Erro ao salvar insumo.");
+    } finally {
+      setLoading(false);
     }
-    setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Deseja realmente excluir este insumo do catálogo mestre?")) {
-      onUpdate(insumos.filter(i => i.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm("Deseja realmente excluir este insumo do catálogo mestre?")) return;
+
+    try {
+      const { error } = await supabase
+        .from('master_insumos')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      onRefresh();
+    } catch (error) {
+      console.error("Erro ao excluir:", error);
+      alert("Erro ao excluir insumo.");
     }
   };
 
@@ -232,9 +268,14 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onUpdate }) => {
             </div>
 
             <div className="flex gap-6 pt-6 border-t border-slate-100">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900">Cancelar</button>
-              <button onClick={handleSave} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-95">
-                <Save size={20} /> SALVAR INSUMO
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900" disabled={loading}>Cancelar</button>
+              <button 
+                onClick={handleSave} 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+                disabled={loading}
+              >
+                <Save size={20} /> 
+                {loading ? 'SALVANDO...' : 'SALVAR INSUMO'}
               </button>
             </div>
           </div>
