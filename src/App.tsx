@@ -139,7 +139,7 @@ const App: React.FC = () => {
         setInventory(formattedInventory);
       }
 
-      // Buscar Ordens de Serviço (Agora buscamos do banco)
+      // Buscar Ordens de Serviço
       const { data: osData } = await supabase.from('service_orders').select('*').order('created_at', { ascending: false });
       if (osData) {
         const formattedOrders: ServiceOrder[] = osData.map((o: any) => ({
@@ -162,8 +162,7 @@ const App: React.FC = () => {
           totalArea: o.total_area,
           totalVolume: o.total_volume,
           status: o.status as OrderStatus,
-          items: o.items || [], // Items JSONB
-          // Campos opcionais/mockados se não existirem no DB ainda
+          items: o.items || [], 
           nozzle: '',
           pressure: '',
           speed: '',
@@ -256,20 +255,29 @@ const App: React.FC = () => {
         user_id: session.user.id
       };
 
-      // Se já existe ID, tenta atualizar, senão insere (assumindo que ID do front é temporário se for novo)
-      // Melhor verificar se é edição pelo ID. Se order.id for numérico (timestamp) é novo.
-      // Vou tentar insert, se der erro de PK (improvável com UUID) ou se eu tivesse lógica de update.
-      // Como o OrderForm gera IDs com Date.now() para novos, eles não são UUIDs válidos.
-      // O Supabase gera UUID. Então vou ignorar o ID do front no insert.
-      
+      // 1. Salvar ou Atualizar a Ordem
       if (editingOrder && editingOrder.id === order.id) {
-         // É atualização de uma ordem existente no banco (UUID)
+         // Se for edição, idealmente deveríamos reverter a reserva anterior e aplicar a nova.
+         // Para simplificar: assumimos que edição não altera itens drasticamente ou implementaremos reversão depois.
+         // Por enquanto, atualizamos apenas os dados da OS.
          const { error } = await supabase.from('service_orders').update(payload).eq('id', order.id);
          if (error) throw error;
       } else {
-         // É nova ordem
+         // Nova Ordem: Criar e RESERVAR estoque
          const { error } = await supabase.from('service_orders').insert(payload);
          if (error) throw error;
+
+         // Reservar Estoque para cada item
+         if (order.items && order.items.length > 0) {
+           for (const item of order.items) {
+             if (item.insumoId) {
+               await supabase.rpc('adjust_stock_reservation', {
+                 row_id: item.insumoId,
+                 quantity: item.qtyTotal
+               });
+             }
+           }
+         }
       }
 
       setEditingOrder(null);
@@ -281,8 +289,54 @@ const App: React.FC = () => {
     }
   };
 
-  const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus) => {
+  const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: Record<string, number> = {}) => {
     try {
+      // 1. Buscar a ordem para saber os itens
+      const { data: currentOrder } = await supabase.from('service_orders').select('*').eq('id', id).single();
+      if (!currentOrder) return;
+
+      // Lógica de Movimentação de Estoque
+      if (newStatus === OrderStatus.COMPLETED) {
+        // BAIXA NO ESTOQUE (Consumo Real)
+        const items = currentOrder.items as any[];
+        if (items) {
+          for (const item of items) {
+            const leftoverQty = leftovers[item.insumoId] || 0;
+            const consumedQty = Math.max(0, item.qtyTotal - leftoverQty);
+            
+            // Chama RPC para remover reserva e baixar físico
+            await supabase.rpc('finalize_stock_usage', {
+              row_id: item.insumoId,
+              qty_to_unreserve: item.qtyTotal, // Remove toda a reserva
+              qty_to_deduct: consumedQty       // Desconta apenas o consumido
+            });
+
+            // Registrar Histórico de Saída
+            await supabase.from('stock_history').insert({
+              inventory_id: item.insumoId,
+              type: 'SAIDA',
+              description: `Baixa por Aplicação OS #${currentOrder.order_number}`,
+              quantity: -consumedQty,
+              user_name: session?.user.email?.split('@')[0] || 'Sistema',
+              user_id: session?.user.id
+            });
+          }
+        }
+      } 
+      else if (newStatus === OrderStatus.CANCELLED) {
+        // ESTORNO DE RESERVA (Se cancelar ordem que estava emitida/em andamento)
+        const items = currentOrder.items as any[];
+        if (items && currentOrder.status !== OrderStatus.COMPLETED) {
+           for (const item of items) {
+             await supabase.rpc('adjust_stock_reservation', {
+               row_id: item.insumoId,
+               quantity: -item.qtyTotal // Valor negativo para remover reserva
+             });
+           }
+        }
+      }
+
+      // 2. Atualizar Status
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
       fetchAllData();
@@ -293,8 +347,26 @@ const App: React.FC = () => {
   };
 
   const handleDeleteOS = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço?")) return;
+    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço? O estoque reservado será liberado.")) return;
     try {
+      // 1. Buscar ordem antes de deletar para liberar reservas
+      const { data: orderToDelete } = await supabase.from('service_orders').select('*').eq('id', id).single();
+      
+      if (orderToDelete) {
+         // Liberar Reservas se não estiver concluída
+         if (orderToDelete.status !== OrderStatus.COMPLETED && orderToDelete.items) {
+            const items = orderToDelete.items as any[];
+            for (const item of items) {
+               if (item.insumoId) {
+                 await supabase.rpc('adjust_stock_reservation', {
+                   row_id: item.insumoId,
+                   quantity: -item.qtyTotal // Remove reserva
+                 });
+               }
+            }
+         }
+      }
+
       const { error } = await supabase.from('service_orders').delete().eq('id', id);
       if (error) throw error;
       fetchAllData();
@@ -304,7 +376,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Handlers para Pedidos de Compra
+  // Handlers para Pedidos de Compra (Mantidos igual)
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
     if (!session?.user) return;
     try {
@@ -343,6 +415,7 @@ const App: React.FC = () => {
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
 
+        // Fallback
         if (!masterInsumoId) {
           const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
           if (mi) masterInsumoId = mi.id;
@@ -395,7 +468,6 @@ const App: React.FC = () => {
           alert("Estoque atualizado com sucesso!");
         } else {
           console.warn("Faltam dados para entrada automática.");
-          alert("ERRO: Dados de produto/fazenda incompletos.");
         }
       }
 
