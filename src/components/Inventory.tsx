@@ -1,25 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { 
-  Package, Search, Filter, History, Plus, X,
+  Package, Search, History, X,
   ArrowDownCircle, ArrowLeftRight, MapPin, 
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
-  User, ClipboardList, MinusCircle, AlertTriangle
+  User, ClipboardList, MinusCircle
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
+import { supabase } from '../integrations/supabase/client';
 
 interface InventoryProps {
   stockProp: Insumo[];
   masterInsumos: MasterInsumo[];
   farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
-  onStockUpdate: (data: Insumo[]) => void;
-  onAddHistory: (record: Omit<StockHistoryEntry, 'id'>) => void;
+  onRefresh: () => void;
 }
 
-const UNITS = ['LT', 'KG', 'UN', 'PCT', 'GAL'];
-
-const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onStockUpdate, onAddHistory }) => {
+const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh }) => {
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
@@ -28,9 +26,10 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
   // Form States
   const [formQty, setFormQty] = useState('');
-  const [selectedMasterId, setSelectedMasterId] = useState('');
+  const [selectedMasterId, setSelectedMasterId] = useState(''); // Para Entrada/Baixa: ID do Master ou Inventory
   const [formReason, setFormReason] = useState('');
-  const [formDestFarm, setFormDestFarm] = useState('');
+  const [formDestFarmId, setFormDestFarmId] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const filteredItems = useMemo(() => {
     return stockProp.filter(item => {
@@ -45,7 +44,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setFormQty('');
     setSelectedMasterId('');
     setFormReason('');
-    setFormDestFarm('');
+    setFormDestFarmId('');
     setSelectedItemForHistory(null);
   };
 
@@ -54,167 +53,181 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setActiveActionModal('HISTORICO');
   };
 
-  const handleActionSubmit = () => {
+  const handleActionSubmit = async () => {
     const qty = Number(formQty);
     if (!qty || qty <= 0) {
       alert("Informe uma quantidade válida.");
       return;
     }
 
-    if (activeActionModal === 'ENTRADA_MANUAL') {
-      const master = masterInsumos.find(m => m.id === selectedMasterId);
-      if (!master || !formDestFarm) {
-        alert("Selecione o produto e a fazenda.");
-        return;
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      if (activeActionModal === 'ENTRADA_MANUAL') {
+        // selectedMasterId é o ID do master_insumos
+        if (!selectedMasterId || !formDestFarmId) {
+          alert("Selecione o produto e a fazenda.");
+          setLoading(false);
+          return;
+        }
+
+        // Verificar se já existe no inventário
+        const { data: existingItem } = await supabase
+          .from('inventory')
+          .select('*')
+          .eq('master_insumo_id', selectedMasterId)
+          .eq('farm_id', formDestFarmId)
+          .single();
+        
+        let inventoryId = existingItem?.id;
+
+        if (existingItem) {
+          await supabase.from('inventory').update({
+            physical_stock: Number(existingItem.physical_stock) + qty
+          }).eq('id', inventoryId);
+        } else {
+          const { data: newItem, error } = await supabase.from('inventory').insert({
+            master_insumo_id: selectedMasterId,
+            farm_id: formDestFarmId,
+            physical_stock: qty,
+            reserved_qty: 0,
+            min_stock: 0,
+            user_id: user.id
+          }).select().single();
+          
+          if (error) throw error;
+          inventoryId = newItem.id;
+        }
+
+        // Registrar Histórico
+        await supabase.from('stock_history').insert({
+          inventory_id: inventoryId,
+          type: 'ENTRADA',
+          description: `Entrada Manual: ${formReason || 'Ajuste de inventário'}`,
+          quantity: qty,
+          user_name: user.email?.split('@')[0] || 'Usuário',
+          user_id: user.id
+        });
+
+      } else if (activeActionModal === 'BAIXA_MANUAL') {
+        // selectedMasterId aqui é o ID do INVENTÁRIO (item selecionado da lista)
+        const targetItem = stockProp.find(s => s.id === selectedMasterId);
+        if (!targetItem) {
+          alert("Selecione o item do estoque.");
+          setLoading(false);
+          return;
+        }
+
+        if (qty > targetItem.availableQty) {
+          alert("Quantidade superior ao disponível.");
+          setLoading(false);
+          return;
+        }
+
+        await supabase.from('inventory').update({
+          physical_stock: targetItem.physicalStock - qty
+        }).eq('id', targetItem.id);
+
+        await supabase.from('stock_history').insert({
+          inventory_id: targetItem.id,
+          type: 'SAIDA',
+          description: `Baixa Manual: ${formReason || 'Ajuste/Perda'}`,
+          quantity: -qty, // Negativo para saída
+          user_name: user.email?.split('@')[0] || 'Usuário',
+          user_id: user.id
+        });
+
+      } else if (activeActionModal === 'TRANSFERIR') {
+        // selectedMasterId é ID do INVENTÁRIO de origem
+        const originItem = stockProp.find(s => s.id === selectedMasterId);
+        if (!originItem || !formDestFarmId) {
+          alert("Selecione origem e destino.");
+          setLoading(false);
+          return;
+        }
+
+        // Buscar ID da fazenda de origem pelo nome (o item do estoque tem nome da fazenda)
+        // Idealmente teríamos o farm_id no objeto Insumo, mas vamos buscar pelo nome na lista de farms
+        const originFarm = farms.find(f => f.name === originItem.farm);
+        if (originFarm?.id === formDestFarmId) {
+          alert("Destino deve ser diferente da origem.");
+          setLoading(false);
+          return;
+        }
+
+        if (qty > originItem.availableQty) {
+          alert("Quantidade insuficiente.");
+          setLoading(false);
+          return;
+        }
+
+        // 1. Reduzir Origem
+        await supabase.from('inventory').update({
+          physical_stock: originItem.physicalStock - qty
+        }).eq('id', originItem.id);
+
+        await supabase.from('stock_history').insert({
+          inventory_id: originItem.id,
+          type: 'SAIDA',
+          description: `Transferência para outra fazenda`,
+          quantity: -qty,
+          user_name: user.email?.split('@')[0] || 'Logística',
+          user_id: user.id
+        });
+
+        // 2. Adicionar Destino
+        // Precisamos do master_insumo_id. O objeto Insumo tem masterId.
+        if (!originItem.masterId) {
+          throw new Error("ID mestre não encontrado para o item.");
+        }
+
+        const { data: destExisting } = await supabase
+          .from('inventory')
+          .select('*')
+          .eq('master_insumo_id', originItem.masterId)
+          .eq('farm_id', formDestFarmId)
+          .single();
+
+        let destInvId = destExisting?.id;
+
+        if (destExisting) {
+          await supabase.from('inventory').update({
+            physical_stock: Number(destExisting.physical_stock) + qty
+          }).eq('id', destInvId);
+        } else {
+          const { data: newDest, error } = await supabase.from('inventory').insert({
+            master_insumo_id: originItem.masterId,
+            farm_id: formDestFarmId,
+            physical_stock: qty,
+            reserved_qty: 0,
+            min_stock: 0,
+            user_id: user.id
+          }).select().single();
+          if (error) throw error;
+          destInvId = newDest.id;
+        }
+
+        await supabase.from('stock_history').insert({
+          inventory_id: destInvId,
+          type: 'ENTRADA',
+          description: `Recebido por transferência de ${originItem.farm}`,
+          quantity: qty,
+          user_name: user.email?.split('@')[0] || 'Logística',
+          user_id: user.id
+        });
       }
 
-      const existingIndex = stockProp.findIndex(s => s.name === master.name && s.farm === formDestFarm);
-      let updatedStock = [...stockProp];
-      let targetId = '';
+      onRefresh(); // Atualiza tudo
+      closeActionModal();
 
-      if (existingIndex > -1) {
-        const item = updatedStock[existingIndex];
-        targetId = item.id;
-        updatedStock[existingIndex] = {
-          ...item,
-          physicalStock: item.physicalStock + qty,
-          availableQty: item.availableQty + qty,
-          stock: item.stock + qty
-        };
-      } else {
-        targetId = `p-${Date.now()}`;
-        const newItem: Insumo = {
-          id: targetId,
-          name: master.name,
-          activeIngredient: master.activeIngredient,
-          physicalStock: qty,
-          reservedQty: 0,
-          availableQty: qty,
-          stock: qty,
-          farm: formDestFarm,
-          unit: master.unit,
-          category: master.category,
-          minStock: 10
-        };
-        updatedStock = [newItem, ...updatedStock];
-      }
-
-      onStockUpdate(updatedStock);
-      onAddHistory({
-        insumoId: targetId,
-        date: new Date().toLocaleString('pt-BR'),
-        type: 'ENTRADA',
-        description: `Entrada Manual: ${formReason || 'Ajuste de inventário'}`,
-        quantity: qty,
-        user: 'Administrador'
-      });
-
-    } else if (activeActionModal === 'BAIXA_MANUAL') {
-      const targetItem = stockProp.find(s => s.id === selectedMasterId);
-      if (!targetItem) {
-        alert("Selecione o item do estoque para dar baixa.");
-        return;
-      }
-
-      if (qty > targetItem.availableQty) {
-        alert("Quantidade de baixa superior ao disponível.");
-        return;
-      }
-
-      const updatedStock = stockProp.map(s => s.id === targetItem.id ? {
-        ...s,
-        physicalStock: s.physicalStock - qty,
-        availableQty: s.availableQty - qty,
-        stock: s.stock - qty
-      } : s);
-
-      onStockUpdate(updatedStock);
-      onAddHistory({
-        insumoId: targetItem.id,
-        date: new Date().toLocaleString('pt-BR'),
-        type: 'SAIDA',
-        description: `Baixa Manual: ${formReason || 'Perda/Vencimento'}`,
-        quantity: -qty,
-        user: 'Administrador'
-      });
-    } else if (activeActionModal === 'TRANSFERIR') {
-      const originItem = stockProp.find(s => s.id === selectedMasterId);
-      if (!originItem || !formDestFarm) {
-        alert("Selecione o item de origem e a fazenda de destino.");
-        return;
-      }
-
-      if (originItem.farm === formDestFarm) {
-        alert("A fazenda de destino deve ser diferente da origem.");
-        return;
-      }
-
-      if (qty > originItem.availableQty) {
-        alert("Quantidade insuficiente para transferência.");
-        return;
-      }
-
-      let updatedStock = [...stockProp];
-      
-      // 1. Reduzir da origem
-      updatedStock = updatedStock.map(s => s.id === originItem.id ? {
-        ...s,
-        physicalStock: s.physicalStock - qty,
-        availableQty: s.availableQty - qty,
-        stock: s.stock - qty
-      } : s);
-
-      // 2. Adicionar ao destino
-      const destIndex = updatedStock.findIndex(s => s.name === originItem.name && s.farm === formDestFarm);
-      let destItemId = '';
-
-      if (destIndex > -1) {
-        const destItem = updatedStock[destIndex];
-        destItemId = destItem.id;
-        updatedStock[destIndex] = {
-          ...destItem,
-          physicalStock: destItem.physicalStock + qty,
-          availableQty: destItem.availableQty + qty,
-          stock: destItem.stock + qty
-        };
-      } else {
-        destItemId = `p-tr-${Date.now()}`;
-        const newDestItem: Insumo = {
-          ...originItem,
-          id: destItemId,
-          farm: formDestFarm,
-          physicalStock: qty,
-          reservedQty: 0,
-          availableQty: qty,
-          stock: qty
-        };
-        updatedStock = [newDestItem, ...updatedStock];
-      }
-
-      onStockUpdate(updatedStock);
-
-      // Histórico Origem
-      onAddHistory({
-        insumoId: originItem.id,
-        date: new Date().toLocaleString('pt-BR'),
-        type: 'SAIDA',
-        description: `Transferência para ${formDestFarm}`,
-        quantity: -qty,
-        user: 'Logística'
-      });
-
-      // Histórico Destino
-      onAddHistory({
-        insumoId: destItemId,
-        date: new Date().toLocaleString('pt-BR'),
-        type: 'ENTRADA',
-        description: `Recebido por transferência de ${originItem.farm}`,
-        quantity: qty,
-        user: 'Logística'
-      });
+    } catch (error) {
+      console.error("Erro na operação:", error);
+      alert("Ocorreu um erro ao salvar as alterações.");
+    } finally {
+      setLoading(false);
     }
-
-    closeActionModal();
   };
 
   return (
@@ -444,11 +457,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                       <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-blue-500" size={18} />
                       <select 
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 appearance-none uppercase"
-                        value={formDestFarm}
-                        onChange={(e) => setFormDestFarm(e.target.value)}
+                        value={formDestFarmId}
+                        onChange={(e) => setFormDestFarmId(e.target.value)}
                       >
                         <option value="">Selecionar Fazenda...</option>
-                        {farms.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                        {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -494,11 +507,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                       <ArrowDownLeft className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
                       <select 
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
-                        value={formDestFarm}
-                        onChange={(e) => setFormDestFarm(e.target.value)}
+                        value={formDestFarmId}
+                        onChange={(e) => setFormDestFarmId(e.target.value)}
                       >
                         <option value="">Selecionar Destino...</option>
-                        {farms.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                        {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -542,18 +555,19 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             </div>
 
             <div className="flex gap-4 pt-4 border-t border-slate-100">
-              <button onClick={closeActionModal} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors">Cancelar</button>
+              <button onClick={closeActionModal} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors" disabled={loading}>Cancelar</button>
               <button 
                 onClick={handleActionSubmit} 
                 className={`flex-1 ${
                   activeActionModal === 'ENTRADA_MANUAL' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 
                   activeActionModal === 'BAIXA_MANUAL' ? 'bg-[#f26522] hover:bg-orange-600 shadow-orange-500/20' : 
                   'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
-                } text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2`}
+                } text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50`}
+                disabled={loading}
               >
                 {activeActionModal === 'ENTRADA_MANUAL' ? <ArrowDownCircle size={18} /> : 
                  activeActionModal === 'BAIXA_MANUAL' ? <MinusCircle size={18} /> : <ArrowLeftRight size={18} />}
-                CONFIRMAR OPERAÇÃO
+                {loading ? 'SALVANDO...' : 'CONFIRMAR OPERAÇÃO'}
               </button>
             </div>
           </div>

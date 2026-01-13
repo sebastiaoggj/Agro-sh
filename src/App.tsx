@@ -38,10 +38,10 @@ const App: React.FC = () => {
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
-  const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); // Mudança: guarda objetos completos
+  const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
-  // Estados mockados (ainda não migrados para o banco nesta etapa)
+  // Histórico agora vindo do DB
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
 
   // 1. Gerenciar Sessão
@@ -77,7 +77,7 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Todas as Fazendas (objetos completos)
+      // Buscar Todas as Fazendas
       const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
       if (farmsData) {
         setFarms(farmsData);
@@ -105,6 +105,24 @@ const App: React.FC = () => {
           minStock: Number(item.min_stock)
         }));
         setInventory(formattedInventory);
+      }
+
+      // Buscar Histórico de Estoque
+      const { data: histData } = await supabase
+        .from('stock_history')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (histData) {
+        setStockHistory(histData.map((h: any) => ({
+          id: h.id,
+          insumoId: h.inventory_id,
+          date: new Date(h.created_at).toLocaleString('pt-BR'),
+          type: h.type,
+          description: h.description,
+          quantity: h.quantity,
+          user: h.user_name || 'Sistema'
+        })));
       }
 
       // Buscar Pedidos de Compra
@@ -176,28 +194,16 @@ const App: React.FC = () => {
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
     if (!session?.user) return;
     try {
-      // Se o status for RECEBIDO, precisamos dar entrada no estoque
       if (status === PurchaseOrderStatus.RECEIVED) {
-        // 1. Buscar detalhes do pedido
+        // ... (Lógica de recebimento existente)
         const { data: po } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
         if (!po) throw new Error("Pedido não encontrado");
 
-        // Precisamos dos IDs. Se o pedido for antigo e não tiver IDs, tentamos buscar pelo nome
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
-
-        // Fallback: buscar IDs pelos nomes se não existirem
-        if (!masterInsumoId) {
-          const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
-          if (mi) masterInsumoId = mi.id;
-        }
-        if (!farmId) {
-          const { data: fm } = await supabase.from('farms').select('id').eq('name', po.farm_name).single();
-          if (fm) farmId = fm.id;
-        }
+        let inventoryId = null;
 
         if (masterInsumoId && farmId) {
-          // 2. Verificar se já existe no inventário
           const { data: existingInv } = await supabase
             .from('inventory')
             .select('*')
@@ -206,28 +212,40 @@ const App: React.FC = () => {
             .single();
 
           if (existingInv) {
-            // Atualiza quantidade
+            inventoryId = existingInv.id;
             await supabase.from('inventory').update({
               physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
             }).eq('id', existingInv.id);
           } else {
-            // Insere novo item no inventário
-            await supabase.from('inventory').insert({
+            const { data: newInv, error } = await supabase.from('inventory').insert({
               master_insumo_id: masterInsumoId,
               farm_id: farmId,
               physical_stock: po.quantity,
               reserved_qty: 0,
               min_stock: 0,
               user_id: session.user.id
-            });
+            }).select().single();
+            if (error) throw error;
+            inventoryId = newInv.id;
           }
+
+          // Registrar no Histórico
+          if (inventoryId) {
+             await supabase.from('stock_history').insert({
+               inventory_id: inventoryId,
+               type: 'ENTRADA',
+               description: `Recebimento Pedido #${po.order_number}`,
+               quantity: po.quantity,
+               user_name: session.user.email?.split('@')[0],
+               user_id: session.user.id
+             });
+          }
+
         } else {
-          console.warn("Não foi possível identificar o insumo ou a fazenda para dar entrada automática.");
-          alert("Atenção: Não foi possível identificar automaticamente o insumo ou a fazenda para atualizar o estoque. Verifique se os nomes correspondem exatamente.");
+          console.warn("Faltam dados para entrada automática.");
         }
       }
 
-      // Atualizar status do pedido
       const { error } = await supabase
         .from('purchase_orders')
         .update({ status, ...extraData })
@@ -291,11 +309,10 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <Inventory 
               stockProp={inventory} 
-              onStockUpdate={setInventory} 
+              onRefresh={handleRefresh}
               masterInsumos={masterInsumos}
-              farms={farms} // Passando a lista de fazendas
+              farms={farms} 
               history={stockHistory}
-              onAddHistory={(rec) => setStockHistory(prev => [{...rec, id: Date.now().toString()}, ...prev])}
             />
           </div>
         );
@@ -313,7 +330,7 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <PurchaseOrders 
               orders={purchaseOrders}
-              farms={farms} // Passando a lista de objetos de fazenda
+              farms={farms} 
               masterInsumos={masterInsumos}
               onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)}
               onReceive={(id, supplier, nf) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, { supplier, invoice_number: nf })}
