@@ -167,12 +167,12 @@ const App: React.FC = () => {
           totalVolume: o.total_volume,
           status: o.status as OrderStatus,
           items: o.items || [], 
-          nozzle: o.nozzle || '', // Garantindo que venha do banco se existir
+          nozzle: o.nozzle || '',
           pressure: o.pressure || '',
           speed: o.speed || '',
-          applicationType: '',
-          mandatoryPhrase: '',
-          observations: ''
+          applicationType: o.application_type || '',
+          mandatoryPhrase: o.mandatory_phrase || '',
+          observations: o.observations || ''
         }));
         setOrders(formattedOrders);
       }
@@ -315,8 +315,8 @@ const App: React.FC = () => {
         field_names: order.fieldNames,
         culture: order.culture,
         variety: order.variety,
-        recommendation_date: order.recommendationDate,
-        max_application_date: order.maxApplicationDate,
+        recommendation_date: toNullable(order.recommendationDate),
+        max_application_date: toNullable(order.maxApplicationDate),
         machine_type: order.machineType,
         machine_id: toNullable(order.machineId),
         machine_name: order.machineName,
@@ -326,6 +326,9 @@ const App: React.FC = () => {
         nozzle: order.nozzle,
         pressure: order.pressure,
         speed: order.speed,
+        application_type: order.applicationType,
+        mandatory_phrase: order.mandatoryPhrase,
+        observations: order.observations,
         total_area: order.totalArea,
         total_volume: order.totalVolume,
         status: finalStatus,
