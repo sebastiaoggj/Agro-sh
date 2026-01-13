@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Beaker, Search, Plus, Edit2, Trash2, X, Save, 
   ChevronRight, ArrowDownRight, Droplet, Layers, Info,
-  ShoppingCart, DollarSign
+  ShoppingCart, DollarSign, Tag
 } from 'lucide-react';
 import { MasterInsumo } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -181,7 +181,7 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
               <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers size={14} className="text-slate-300" />
-                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{item.category}</span>
+                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-yellow-400/20 text-yellow-700 px-2 py-0.5 rounded-md">{item.category}</span>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => handleOpenModal(item)} className="p-2.5 text-slate-300 hover:text-emerald-500 transition-colors bg-slate-50 rounded-xl hover:bg-emerald-50">
@@ -220,29 +220,51 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Princípio Ativo</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-black uppercase text-sm outline-none focus:ring-2 focus:ring-emerald-500" 
-                  placeholder="EX: GLIFOSATO POTÁSSICO"
-                  value={formData.activeIngredient}
-                  onChange={(e) => setFormData({...formData, activeIngredient: e.target.value})}
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Princípio Ativo</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-black uppercase text-sm outline-none focus:ring-2 focus:ring-emerald-500" 
+                    placeholder="EX: GLIFOSATO"
+                    value={formData.activeIngredient}
+                    onChange={(e) => setFormData({...formData, activeIngredient: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1 flex items-center gap-2">
+                    <Tag size={12} /> Categoria
+                  </label>
+                  <div className="relative">
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase cursor-pointer"
+                      value={formData.category}
+                      onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    >
+                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                  </div>
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Unidade</label>
-                  <select 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
-                    value={formData.unit}
-                    onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                  >
-                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
+                  <div className="relative">
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase cursor-pointer"
+                      value={formData.unit}
+                      onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                    >
+                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                    <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Preço Médio por Unidade</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Preço Médio (R$)</label>
                   <div className="relative">
                     <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={16} />
                     <input 
