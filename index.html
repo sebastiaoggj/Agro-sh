@@ -29,6 +29,17 @@
         overflow: hidden;
       }
       
+      @media print {
+        body {
+          overflow: visible !important;
+          height: auto !important;
+        }
+        #root {
+          height: auto !important;
+          overflow: visible !important;
+        }
+      }
+      
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
