@@ -15,9 +15,10 @@ interface InventoryProps {
   farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
   onRefresh: () => void;
+  onStockChange?: () => void; // Novo prop opcional
 }
 
-const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh }) => {
+const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh, onStockChange }) => {
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
@@ -26,7 +27,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
   // Form States
   const [formQty, setFormQty] = useState('');
-  const [selectedMasterId, setSelectedMasterId] = useState(''); // Para Entrada/Baixa: ID do Master ou Inventory
+  const [selectedMasterId, setSelectedMasterId] = useState(''); 
   const [formReason, setFormReason] = useState('');
   const [formDestFarmId, setFormDestFarmId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -66,14 +67,12 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       if (!user) throw new Error("Usuário não autenticado");
 
       if (activeActionModal === 'ENTRADA_MANUAL') {
-        // selectedMasterId é o ID do master_insumos
         if (!selectedMasterId || !formDestFarmId) {
           alert("Selecione o produto e a fazenda.");
           setLoading(false);
           return;
         }
 
-        // Verificar se já existe no inventário
         const { data: existingItem } = await supabase
           .from('inventory')
           .select('*')
@@ -101,7 +100,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           inventoryId = newItem.id;
         }
 
-        // Registrar Histórico
         await supabase.from('stock_history').insert({
           inventory_id: inventoryId,
           type: 'ENTRADA',
@@ -112,7 +110,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         });
 
       } else if (activeActionModal === 'BAIXA_MANUAL') {
-        // selectedMasterId aqui é o ID do INVENTÁRIO (item selecionado da lista)
         const targetItem = stockProp.find(s => s.id === selectedMasterId);
         if (!targetItem) {
           alert("Selecione o item do estoque.");
@@ -134,13 +131,12 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           inventory_id: targetItem.id,
           type: 'SAIDA',
           description: `Baixa Manual: ${formReason || 'Ajuste/Perda'}`,
-          quantity: -qty, // Negativo para saída
+          quantity: -qty,
           user_name: user.email?.split('@')[0] || 'Usuário',
           user_id: user.id
         });
 
       } else if (activeActionModal === 'TRANSFERIR') {
-        // selectedMasterId é ID do INVENTÁRIO de origem
         const originItem = stockProp.find(s => s.id === selectedMasterId);
         if (!originItem || !formDestFarmId) {
           alert("Selecione origem e destino.");
@@ -148,8 +144,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        // Buscar ID da fazenda de origem pelo nome (o item do estoque tem nome da fazenda)
-        // Idealmente teríamos o farm_id no objeto Insumo, mas vamos buscar pelo nome na lista de farms
         const originFarm = farms.find(f => f.name === originItem.farm);
         if (originFarm?.id === formDestFarmId) {
           alert("Destino deve ser diferente da origem.");
@@ -163,7 +157,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        // 1. Reduzir Origem
         await supabase.from('inventory').update({
           physical_stock: originItem.physicalStock - qty
         }).eq('id', originItem.id);
@@ -177,11 +170,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           user_id: user.id
         });
 
-        // 2. Adicionar Destino
-        // Precisamos do master_insumo_id. O objeto Insumo tem masterId.
-        if (!originItem.masterId) {
-          throw new Error("ID mestre não encontrado para o item.");
-        }
+        if (!originItem.masterId) throw new Error("ID mestre não encontrado.");
 
         const { data: destExisting } = await supabase
           .from('inventory')
@@ -219,7 +208,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         });
       }
 
-      onRefresh(); // Atualiza tudo
+      onRefresh();
+      // Chama o callback de mudança de estoque para disparar a verificação de ordens
+      if (onStockChange && (activeActionModal === 'ENTRADA_MANUAL' || activeActionModal === 'TRANSFERIR')) {
+        onStockChange();
+      }
       closeActionModal();
 
     } catch (error) {

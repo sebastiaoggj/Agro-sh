@@ -19,7 +19,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import Login from './components/Login';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus, OSItem } from './types';
 
 // Componente Logo
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [operators, setOperators] = useState<{id: string, name: string}[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
+  const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
 
   // 1. Gerenciar Sessão
   useEffect(() => {
@@ -64,7 +65,6 @@ const App: React.FC = () => {
     if (!session) return;
     
     try {
-      // Buscar Master Insumos
       const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
         setMasterInsumos(masterData.map(item => ({
@@ -78,13 +78,11 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Todas as Fazendas
       const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
       if (farmsData) {
         setFarms(farmsData);
       }
 
-      // Buscar Talhões
       const { data: fieldsData } = await supabase.from('fields').select('*');
       if (fieldsData) {
         setFields(fieldsData.map(f => ({
@@ -95,7 +93,6 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Máquinas
       const { data: machinesData } = await supabase.from('machines').select('*');
       if (machinesData) {
         setMachines(machinesData.map(m => ({
@@ -106,7 +103,6 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Operadores
       const { data: opData } = await supabase.from('operators').select('*');
       if (opData) {
         setOperators(opData.map(o => ({
@@ -115,7 +111,6 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Estoque
       const { data: invData } = await supabase
         .from('inventory')
         .select(`*, master_insumo:master_insumos(name, active_ingredient, unit, category, price), farm:farms(name)`);
@@ -139,7 +134,6 @@ const App: React.FC = () => {
         setInventory(formattedInventory);
       }
 
-      // Buscar Ordens de Serviço
       const { data: osData } = await supabase.from('service_orders').select('*').order('created_at', { ascending: false });
       if (osData) {
         const formattedOrders: ServiceOrder[] = osData.map((o: any) => ({
@@ -173,7 +167,6 @@ const App: React.FC = () => {
         setOrders(formattedOrders);
       }
 
-      // Buscar Histórico de Estoque
       const { data: histData } = await supabase
         .from('stock_history')
         .select('*')
@@ -191,7 +184,6 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Pedidos de Compra
       const { data: poData } = await supabase
         .from('purchase_orders')
         .select('*')
@@ -228,10 +220,102 @@ const App: React.FC = () => {
     }
   }, [session]);
 
-  // Handlers para Ordens de Serviço (ServiceOrders)
+  // Função Auxiliar: Verificar se tem estoque para todos os itens da OS
+  const checkStockAvailability = (items: OSItem[], currentInventory: Insumo[]) => {
+    if (!items || items.length === 0) return true;
+    
+    for (const item of items) {
+      if (!item.insumoId) continue;
+      // Busca o item no estoque
+      const stockItem = currentInventory.find(inv => inv.id === item.insumoId);
+      
+      // Se não existir ou se a quantidade disponível (Físico - Reservado) for menor que a necessária
+      if (!stockItem || stockItem.availableQty < item.qtyTotal) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  // Função Automática: Liberar Ordens Aguardando Produto
+  const triggerAutoRelease = async () => {
+    // 1. Buscar todas as ordens aguardando produto
+    const { data: awaitingOrders } = await supabase
+      .from('service_orders')
+      .select('*')
+      .eq('status', OrderStatus.AWAITING_PRODUCT);
+
+    if (!awaitingOrders || awaitingOrders.length === 0) return;
+
+    // 2. Buscar inventário atualizado (crucial pegar do banco para garantir consistência)
+    const { data: freshInvData } = await supabase.from('inventory').select('*');
+    if (!freshInvData) return;
+
+    const freshInventoryMap = new Map(freshInvData.map((inv: any) => [
+      inv.id, 
+      Number(inv.physical_stock) - Number(inv.reserved_qty) // Qtd Disponível
+    ]));
+
+    let updatedCount = 0;
+
+    // 3. Verificar cada ordem
+    for (const order of awaitingOrders) {
+      const items = order.items as OSItem[];
+      let canRelease = true;
+
+      // Verifica se TEM estoque para TODOS os itens desta ordem
+      for (const item of items) {
+        if (item.insumoId) {
+          const available = freshInventoryMap.get(item.insumoId) || 0;
+          if (available < item.qtyTotal) {
+            canRelease = false;
+            break; 
+          }
+        }
+      }
+
+      // 4. Se puder liberar, atualiza status e RESERVA o estoque
+      if (canRelease) {
+        // Atualizar status
+        await supabase.from('service_orders').update({ status: OrderStatus.EMITTED }).eq('id', order.id);
+        
+        // Efetuar Reservas
+        for (const item of items) {
+           if (item.insumoId) {
+             await supabase.rpc('adjust_stock_reservation', {
+               row_id: item.insumoId,
+               quantity: item.qtyTotal
+             });
+             // Atualiza o mapa local para as próximas ordens do loop não usarem o mesmo saldo
+             const currentAvailable = freshInventoryMap.get(item.insumoId) || 0;
+             freshInventoryMap.set(item.insumoId, currentAvailable - item.qtyTotal);
+           }
+        }
+        updatedCount++;
+      }
+    }
+
+    if (updatedCount > 0) {
+      alert(`${updatedCount} ordens que aguardavam produto foram liberadas automaticamente!`);
+      fetchAllData();
+    }
+  };
+
+  // Handler Salvar OS
   const handleSaveServiceOrder = async (order: ServiceOrder) => {
     if (!session?.user) return;
     try {
+      // Verificar Disponibilidade de Estoque ANTES de definir o status
+      const hasStock = checkStockAvailability(order.items, inventory);
+      
+      // Se tiver estoque -> EMITIDA. Se não -> AGUARDANDO PRODUTO.
+      // Obs: Se o usuário estiver editando e o status já for outro (ex: Em Progresso), mantemos.
+      // Mas se for nova ou status rascunho/emitida, aplicamos a lógica.
+      let finalStatus = order.status;
+      if (!order.id || order.status === OrderStatus.EMITTED || order.status === OrderStatus.DRAFT || order.status === OrderStatus.AWAITING_PRODUCT) {
+         finalStatus = hasStock ? OrderStatus.EMITTED : OrderStatus.AWAITING_PRODUCT;
+      }
+
       const payload = {
         order_number: order.orderNumber,
         farm_id: order.farmId,
@@ -250,25 +334,21 @@ const App: React.FC = () => {
         flow_rate: order.flowRate,
         total_area: order.totalArea,
         total_volume: order.totalVolume,
-        status: order.status,
+        status: finalStatus,
         items: order.items,
         user_id: session.user.id
       };
 
-      // 1. Salvar ou Atualizar a Ordem
       if (editingOrder && editingOrder.id === order.id) {
-         // Se for edição, idealmente deveríamos reverter a reserva anterior e aplicar a nova.
-         // Para simplificar: assumimos que edição não altera itens drasticamente ou implementaremos reversão depois.
-         // Por enquanto, atualizamos apenas os dados da OS.
          const { error } = await supabase.from('service_orders').update(payload).eq('id', order.id);
          if (error) throw error;
       } else {
-         // Nova Ordem: Criar e RESERVAR estoque
          const { error } = await supabase.from('service_orders').insert(payload);
          if (error) throw error;
 
-         // Reservar Estoque para cada item
-         if (order.items && order.items.length > 0) {
+         // SÓ RESERVA SE O STATUS FOR "EMITIDA"
+         // Se for "AGUARDANDO PRODUTO", NÃO reserva ainda.
+         if (finalStatus === OrderStatus.EMITTED && order.items && order.items.length > 0) {
            for (const item of order.items) {
              if (item.insumoId) {
                await supabase.rpc('adjust_stock_reservation', {
@@ -282,6 +362,12 @@ const App: React.FC = () => {
 
       setEditingOrder(null);
       setActiveTab('dashboard');
+      
+      // Se ficou aguardando produto, avisamos o usuário
+      if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
+        alert("Ordem criada com status 'Aguardando Produto' por falta de estoque suficiente.");
+      }
+
       fetchAllData();
     } catch (error) {
       console.error("Erro ao salvar OS:", error);
@@ -291,27 +377,22 @@ const App: React.FC = () => {
 
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: Record<string, number> = {}) => {
     try {
-      // 1. Buscar a ordem para saber os itens
       const { data: currentOrder } = await supabase.from('service_orders').select('*').eq('id', id).single();
       if (!currentOrder) return;
 
-      // Lógica de Movimentação de Estoque
       if (newStatus === OrderStatus.COMPLETED) {
-        // BAIXA NO ESTOQUE (Consumo Real)
         const items = currentOrder.items as any[];
         if (items) {
           for (const item of items) {
             const leftoverQty = leftovers[item.insumoId] || 0;
             const consumedQty = Math.max(0, item.qtyTotal - leftoverQty);
             
-            // Chama RPC para remover reserva e baixar físico
             await supabase.rpc('finalize_stock_usage', {
               row_id: item.insumoId,
-              qty_to_unreserve: item.qtyTotal, // Remove toda a reserva
-              qty_to_deduct: consumedQty       // Desconta apenas o consumido
+              qty_to_unreserve: item.qtyTotal,
+              qty_to_deduct: consumedQty
             });
 
-            // Registrar Histórico de Saída
             await supabase.from('stock_history').insert({
               inventory_id: item.insumoId,
               type: 'SAIDA',
@@ -324,19 +405,19 @@ const App: React.FC = () => {
         }
       } 
       else if (newStatus === OrderStatus.CANCELLED) {
-        // ESTORNO DE RESERVA (Se cancelar ordem que estava emitida/em andamento)
         const items = currentOrder.items as any[];
-        if (items && currentOrder.status !== OrderStatus.COMPLETED) {
+        // Só estorna reserva se estava EMITIDA ou EM ANDAMENTO
+        // Se estava AGUARDANDO PRODUTO, não tinha reserva, então não faz nada.
+        if (items && currentOrder.status !== OrderStatus.COMPLETED && currentOrder.status !== OrderStatus.AWAITING_PRODUCT) {
            for (const item of items) {
              await supabase.rpc('adjust_stock_reservation', {
                row_id: item.insumoId,
-               quantity: -item.qtyTotal // Valor negativo para remover reserva
+               quantity: -item.qtyTotal 
              });
            }
         }
       }
 
-      // 2. Atualizar Status
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
       fetchAllData();
@@ -347,20 +428,18 @@ const App: React.FC = () => {
   };
 
   const handleDeleteOS = async (id: string) => {
-    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço? O estoque reservado será liberado.")) return;
+    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço?")) return;
     try {
-      // 1. Buscar ordem antes de deletar para liberar reservas
       const { data: orderToDelete } = await supabase.from('service_orders').select('*').eq('id', id).single();
       
       if (orderToDelete) {
-         // Liberar Reservas se não estiver concluída
-         if (orderToDelete.status !== OrderStatus.COMPLETED && orderToDelete.items) {
+         if (orderToDelete.status !== OrderStatus.COMPLETED && orderToDelete.status !== OrderStatus.AWAITING_PRODUCT && orderToDelete.items) {
             const items = orderToDelete.items as any[];
             for (const item of items) {
                if (item.insumoId) {
                  await supabase.rpc('adjust_stock_reservation', {
                    row_id: item.insumoId,
-                   quantity: -item.qtyTotal // Remove reserva
+                   quantity: -item.qtyTotal
                  });
                }
             }
@@ -376,7 +455,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Handlers para Pedidos de Compra (Mantidos igual)
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
     if (!session?.user) return;
     try {
@@ -415,7 +493,6 @@ const App: React.FC = () => {
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
 
-        // Fallback
         if (!masterInsumoId) {
           const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
           if (mi) masterInsumoId = mi.id;
@@ -466,6 +543,10 @@ const App: React.FC = () => {
              });
           }
           alert("Estoque atualizado com sucesso!");
+          
+          // !!! AQUI DISPARA A VERIFICAÇÃO AUTOMÁTICA DE ORDENS PENDENTES !!!
+          await triggerAutoRelease();
+
         } else {
           console.warn("Faltam dados para entrada automática.");
         }
@@ -500,8 +581,6 @@ const App: React.FC = () => {
     fetchAllData();
   };
 
-  const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
-
   if (loading) {
     return <div className="h-screen flex items-center justify-center bg-slate-100"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
   }
@@ -532,6 +611,8 @@ const App: React.FC = () => {
             <Inventory 
               stockProp={inventory} 
               onRefresh={handleRefresh}
+              // Passa a função de verificação automática para o componente de inventário
+              onStockChange={triggerAutoRelease}
               masterInsumos={masterInsumos}
               farms={farms} 
               history={stockHistory}
