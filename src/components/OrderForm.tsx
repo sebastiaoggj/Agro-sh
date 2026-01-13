@@ -25,9 +25,9 @@ interface OrderFormProps {
   machines: Machine[];
   operators: { id: string, name: string }[];
   insumos: Insumo[];
+  crops: { id: string, name: string, variety: string }[]; // Novo prop
 }
 
-// Interface auxiliar para itens com unidade
 interface ExtendedOSItem extends OSItem {
   unit?: string;
 }
@@ -41,7 +41,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
   fields,
   machines,
   operators,
-  insumos
+  insumos,
+  crops // Recebendo culturas
 }) => {
   const [step, setStep] = useState<'FORM' | 'SUMMARY' | 'SUCCESS'>('FORM');
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
@@ -62,10 +63,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
     operatorId: initialData?.operatorId || '',
     machineId: initialData?.machineId || '',
     tankCapacity: initialData?.tankCapacity || 0,
-    flowRate: initialData?.flowRate || 0, // Vazão L/ha
+    flowRate: initialData?.flowRate || 0,
     nozzle: initialData?.nozzle || '',
-    pressure: initialData?.pressure || '', // Pressão
-    speed: initialData?.speed || '', // Velocidade
+    pressure: initialData?.pressure || '',
+    speed: initialData?.speed || '',
     status: initialData?.status || OrderStatus.EMITTED,
     applicationType: initialData?.applicationType || 'HERBICIDA',
     mandatoryPhrase: initialData?.mandatoryPhrase || 'É obrigatório o uso de EPI\'S - Luva, Máscara, Roupa impermeável e Óculos de proteção para manipular os produtos',
@@ -74,11 +75,22 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   const [items, setItems] = useState<ExtendedOSItem[]>(
     initialData?.items.map(i => {
-      // Tentar recuperar a unidade do insumo original se possível
       const originalInsumo = insumos.find(ins => ins.id === i.insumoId);
       return { ...i, unit: originalInsumo?.unit || 'L/Kg' };
     }) || []
   );
+
+  // Computados para Culturas
+  const uniqueCultures = useMemo(() => {
+    // Extrai nomes únicos de culturas
+    const names = new Set(crops.map(c => c.name));
+    return Array.from(names);
+  }, [crops]);
+
+  const availableVarieties = useMemo(() => {
+    // Filtra variedades baseada na cultura selecionada
+    return crops.filter(c => c.name === formData.culture);
+  }, [crops, formData.culture]);
 
   const selectedFarm = useMemo(() => farms.find(f => f.id === formData.farmId), [formData.farmId, farms]);
   
@@ -93,25 +105,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const selectedMachine = useMemo(() => machines.find(m => m.id === formData.machineId), [formData.machineId, machines]);
   const selectedOperator = useMemo(() => operators.find(o => o.id === formData.operatorId), [formData.operatorId, operators]);
 
-  // --- LÓGICA DE CÁLCULO ---
   const stats = useMemo(() => {
     const area = selectedFields.reduce((sum, f) => sum + f.area, 0);
-    const flow = Number(formData.flowRate) || 0; // L/ha
-    const tankCap = Number(formData.tankCapacity) || 0; // L
-    
-    // 1. Volume Total da Calda (Area * Vazão)
+    const flow = Number(formData.flowRate) || 0;
+    const tankCap = Number(formData.tankCapacity) || 0;
     const totalVolume = area * flow;
-    
-    // 2. Autonomia do Tanque (Quantos hectares faz com 1 tanque) = Capacidade / Vazão
-    // Ex: 20L / 100L/ha = 0.20 ha
     const haPerTank = flow > 0 ? tankCap / flow : 0;
-
-    // 3. Número de Tanques
     const numberOfTanksExact = tankCap > 0 ? totalVolume / tankCap : 0;
     const numberOfTanksFull = Math.floor(numberOfTanksExact);
     const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
-    
-    // 4. Volume do Tanque Parcial
     const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCap) : 0;
 
     return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume };
@@ -123,44 +125,29 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
   }, [formData.machineId, initialData, selectedMachine]);
 
-  // Atualiza itens quando as estatísticas mudam
   useEffect(() => {
     const newItems = items.map(item => {
       if (!item.insumoId) return item;
-      
-      // Dose Fixa inserida pelo usuário
       const dose = item.dosePerHa;
-
-      // Carga por Tanque Cheio = Dose * ha/Tanque
-      // Ex: 2 L/ha * 0.2 ha/tanque = 0.4 L
       const qtyPerTank = dose * stats.haPerTank;
-
-      // Total para a Área = Dose * Área Total
       const qtyTotal = dose * stats.area;
-
-      return {
-        ...item,
-        qtyPerTank,
-        qtyTotal
-      };
+      return { ...item, qtyPerTank, qtyTotal };
     });
-    // Evita loop infinito comparando stringify ou checando deep equality se necessário
-    // Aqui simplificado: só atualiza se os valores numéricos mudaram drasticamente
     const hasChanges = newItems.some((newItem, idx) => {
       const oldItem = items[idx];
       return Math.abs(newItem.qtyPerTank - oldItem.qtyPerTank) > 0.0001 || 
              Math.abs(newItem.qtyTotal - oldItem.qtyTotal) > 0.0001;
     });
-
-    if (hasChanges) {
-      setItems(newItems);
-    }
+    if (hasChanges) setItems(newItems);
   }, [stats.haPerTank, stats.area, items]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'farmId') {
       setFormData(prev => ({ ...prev, farmId: value, fieldIds: [] }));
+    } else if (name === 'culture') {
+      // Ao mudar cultura, limpa variedade
+      setFormData(prev => ({ ...prev, culture: value, variety: '' }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -189,7 +176,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const insumo = insumos.find(i => i.id === insumoId);
     if (!insumo) return;
     
-    // Cálculos imediatos para a UI ficar responsiva
     const qtyPerTank = dose * stats.haPerTank;
     const qtyTotal = dose * stats.area;
 
@@ -244,7 +230,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
   };
 
-  // Filtragem e Handlers
   const availableInsumos = useMemo(() => {
     if (!formData.farmId) return insumos;
     const farmName = farms.find(f => f.id === formData.farmId)?.name;
@@ -516,20 +501,71 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Cultura / Variedade</label>
-              <div className="flex gap-2">
-                  <input type="text" name="culture" className="w-1/2 bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="CULTURA" value={formData.culture} onChange={handleInputChange} />
-                  <input type="text" name="variety" className="w-1/2 bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="VARIEDADE" value={formData.variety} onChange={handleInputChange} />
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Identificador da Ordem</label>
+              <div className="relative group">
+                <input 
+                  type="text" 
+                  name="orderNumber" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all pr-16" 
+                  placeholder="EX: 2026001" 
+                  value={formData.orderNumber} 
+                  onChange={handleInputChange} 
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Cultura Cadastrada</label>
+              <select 
+                name="culture" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" 
+                value={formData.culture} 
+                onChange={handleInputChange}
+              >
+                <option value="">SELECIONE A CULTURA</option>
+                {uniqueCultures.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Variedade Disponível</label>
+              <select 
+                name="variety" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50" 
+                value={formData.variety} 
+                onChange={handleInputChange}
+                disabled={!formData.culture}
+              >
+                <option value="">SELECIONE A VARIEDADE</option>
+                {availableVarieties.map(c => <option key={c.id} value={c.variety}>{c.variety}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Recomendação</label>
+              <div className="relative">
+                <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input type="date" name="recommendationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" value={formData.recommendationDate} onChange={handleInputChange} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Janela Máxima de Aplicação</label>
+              <div className="relative">
+                <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input type="date" name="maxApplicationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" value={formData.maxApplicationDate} onChange={handleInputChange} />
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Identificação da Máquina</label>
-              <select name="machineId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50" value={formData.machineId} onChange={handleInputChange}>
-                <option value="">SELECIONE O EQUIPAMENTO</option>
-                {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Modalidade</label>
+              <select name="machineType" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" value={formData.machineType} onChange={handleInputChange}>
+                <option value="">TIPO DE EQUIPAMENTO</option>
+                {MACHINE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div className="space-y-2">
@@ -540,8 +576,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Janela de Aplicação</label>
-              <input type="date" name="maxApplicationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.maxApplicationDate} onChange={handleInputChange} />
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Identificação da Máquina</label>
+              <select name="machineId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50" value={formData.machineId} onChange={handleInputChange} disabled={!formData.machineType}>
+                <option value="">MODELO ALOCADO</option>
+                {/* Filtrar máquinas que correspondem ao tipo selecionado, ou mostrar todas se não houver tipo definido no DB ainda */}
+                {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
             </div>
           </div>
 
@@ -602,8 +642,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
 
             <div className="space-y-6">
+              {items.length === 0 && (
+                <div className="text-center py-16 bg-slate-50 rounded-[2.5rem] border-2 border-dashed border-slate-200">
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Nenhum produto adicionado à calda</p>
+                </div>
+              )}
               {items.map((item, idx) => (
-                <div key={idx} className="bg-white border border-slate-200 rounded-[2rem] p-8 relative group shadow-sm hover:shadow-md transition-shadow">
+                <div key={idx} className="bg-white border border-slate-200 rounded-[2rem] p-8 relative group animate-in slide-in-from-top-4 duration-300 shadow-sm hover:shadow-md transition-shadow">
                   <button onClick={() => removeProduct(idx)} className="absolute top-6 right-6 text-slate-300 hover:text-red-500 transition-colors p-2 bg-slate-50 rounded-xl">
                     <Trash2 size={18} />
                   </button>
@@ -617,18 +662,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     </div>
                     <div className="md:col-span-1 space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Dose / ha</label>
-                      <div className="relative">
-                         <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0.00" value={item.dosePerHa || ''} onChange={(e) => updateItem(idx, item.insumoId, Number(e.target.value))} />
-                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">{item.unit || 'L/Kg'}</span>
-                      </div>
+                      <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" placeholder="0.00" value={item.dosePerHa || ''} onChange={(e) => updateItem(idx, item.insumoId, Number(e.target.value))} />
                     </div>
-                    
-                    {/* Campos de Resultado Travados */}
-                    <div className="md:col-span-1 flex flex-col items-center bg-slate-100 p-4 rounded-xl border border-slate-200 opacity-80 cursor-not-allowed">
+                    <div className="md:col-span-1 flex flex-col items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
                       <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Carga/Tanque</span>
                       <span className="text-xs font-black text-slate-700">{item.qtyPerTank > 0 ? item.qtyPerTank.toFixed(2) : '-'}</span>
                     </div>
-                    <div className="md:col-span-1 flex flex-col items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100 opacity-80 cursor-not-allowed">
+                    <div className="md:col-span-1 flex flex-col items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                       <span className="text-[9px] font-black uppercase text-emerald-600 tracking-widest mb-1">Total OS</span>
                       <span className="text-xs font-black text-emerald-700">{item.qtyTotal > 0 ? item.qtyTotal.toFixed(2) : '-'}</span>
                     </div>

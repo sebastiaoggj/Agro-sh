@@ -42,6 +42,7 @@ const App: React.FC = () => {
   const [fields, setFields] = useState<Field[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [operators, setOperators] = useState<{id: string, name: string}[]>([]);
+  const [crops, setCrops] = useState<{id: string, name: string, variety: string}[]>([]); // Novo estado para Culturas
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
@@ -75,6 +76,15 @@ const App: React.FC = () => {
           category: item.category,
           price: item.price,
           defaultPurchaseQty: item.default_purchase_qty
+        })));
+      }
+
+      const { data: cropsData } = await supabase.from('crops').select('*').order('name');
+      if (cropsData) {
+        setCrops(cropsData.map(c => ({
+          id: c.id,
+          name: c.name,
+          variety: c.variety
         })));
       }
 
@@ -157,9 +167,9 @@ const App: React.FC = () => {
           totalVolume: o.total_volume,
           status: o.status as OrderStatus,
           items: o.items || [], 
-          nozzle: '',
-          pressure: '',
-          speed: '',
+          nozzle: o.nozzle || '', // Garantindo que venha do banco se existir
+          pressure: o.pressure || '',
+          speed: o.speed || '',
           applicationType: '',
           mandatoryPhrase: '',
           observations: ''
@@ -271,13 +281,12 @@ const App: React.FC = () => {
 
       if (canRelease) {
         await supabase.from('service_orders').update({ status: OrderStatus.EMITTED }).eq('id', order.id);
-        // Após liberar, o recálculo global abaixo vai ajustar as reservas
         updatedCount++;
       }
     }
 
     if (updatedCount > 0) {
-      await supabase.rpc('recalculate_stock_reservations'); // Garante consistência
+      await supabase.rpc('recalculate_stock_reservations'); 
       alert(`${updatedCount} ordens que aguardavam produto foram liberadas automaticamente!`);
       fetchAllData();
     }
@@ -287,10 +296,8 @@ const App: React.FC = () => {
   const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
     if (!session?.user) return false;
     try {
-      // Filtrar itens vazios antes de enviar para o DB
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
       
-      // Verificar Disponibilidade de Estoque ANTES de definir o status
       const hasStock = checkStockAvailability(validItems, inventory);
       
       let finalStatus = order.status;
@@ -298,12 +305,11 @@ const App: React.FC = () => {
          finalStatus = hasStock ? OrderStatus.EMITTED : OrderStatus.AWAITING_PRODUCT;
       }
 
-      // Função auxiliar para converter string vazia em NULL (para UUIDs opcionais)
       const toNullable = (val: string | undefined) => (!val || val.trim() === '') ? null : val;
 
       const payload = {
         order_number: order.orderNumber,
-        farm_id: order.farmId, // Obrigatório
+        farm_id: order.farmId,
         farm_name: order.farmName,
         field_ids: order.fieldIds,
         field_names: order.fieldNames,
@@ -312,11 +318,14 @@ const App: React.FC = () => {
         recommendation_date: order.recommendationDate,
         max_application_date: order.maxApplicationDate,
         machine_type: order.machineType,
-        machine_id: toNullable(order.machineId), // Opcional
+        machine_id: toNullable(order.machineId),
         machine_name: order.machineName,
-        operator_id: toNullable(order.operatorId), // Opcional
+        operator_id: toNullable(order.operatorId),
         tank_capacity: order.tankCapacity,
         flow_rate: order.flowRate,
+        nozzle: order.nozzle,
+        pressure: order.pressure,
+        speed: order.speed,
         total_area: order.totalArea,
         total_volume: order.totalVolume,
         status: finalStatus,
@@ -332,7 +341,6 @@ const App: React.FC = () => {
          if (error) throw error;
       }
 
-      // O trigger no banco cuidará do recálculo. Apenas recarregamos a interface.
       setTimeout(() => {
          fetchAllData();
       }, 500);
@@ -347,17 +355,15 @@ const App: React.FC = () => {
 
     } catch (error: any) {
       console.error("Erro ao salvar OS:", error);
-      // Exibir mensagem de erro mais detalhada se disponível
       const msg = error.message || error.details || "Erro desconhecido";
       alert(`Erro ao salvar ordem de serviço: ${msg}`);
       return false;
     }
   };
 
-  // --- NOVA LÓGICA DE ATUALIZAÇÃO DE STATUS (USANDO RPC PARA INICIAR) ---
+  // Handlers de Status, Delete, PO etc mantidos iguais (só atualizando o context se necessário)
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: Record<string, number> = {}) => {
     try {
-      // 1. INICIAR (EMITTED -> IN_PROGRESS): USAR FUNÇÃO ATÔMICA
       if (newStatus === OrderStatus.IN_PROGRESS) {
         const { error } = await supabase.rpc('start_service_order', {
           p_order_id: id,
@@ -366,17 +372,14 @@ const App: React.FC = () => {
         });
         
         if (error) throw error;
-        // Não precisa recalcular manualmente, o RPC já fez isso
         fetchAllData();
         return;
       }
 
-      // Para outros status, mantemos a lógica anterior mas simplificada
       const { data: currentOrder } = await supabase.from('service_orders').select('*').eq('id', id).single();
       if (!currentOrder) return;
       const items = currentOrder.items as any[];
       
-      // 2. FINALIZAR (IN_PROGRESS -> COMPLETED): DEVOLVE SOBRAS SE HOUVER
       if (newStatus === OrderStatus.COMPLETED && currentOrder.status === OrderStatus.IN_PROGRESS) {
          if (items) {
            for (const item of items) {
@@ -401,8 +404,6 @@ const App: React.FC = () => {
            }
          }
       }
-
-      // 3. CANCELAR (QUALQUER -> CANCELLED)
       else if (newStatus === OrderStatus.CANCELLED) {
          if (items) {
            if (currentOrder.status === OrderStatus.IN_PROGRESS) {
@@ -427,11 +428,9 @@ const App: React.FC = () => {
          }
       }
 
-      // Atualiza o Status
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
       
-      // Trigger cuida do recálculo
       setTimeout(() => {
          fetchAllData();
       }, 500);
@@ -677,6 +676,7 @@ const App: React.FC = () => {
               machines={machines}
               operators={operators}
               insumos={inventory}
+              crops={crops} // Passando culturas para o formulário
             />
           </div>
         );
