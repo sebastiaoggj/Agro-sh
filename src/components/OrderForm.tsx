@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Trash2, Plus, Info, Save, X, 
@@ -12,42 +11,7 @@ import {
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
 
-const FARMS = [
-  { id: 'f1', name: 'Fazenda Santo Aurélio' }, 
-  { id: 'f2', name: 'Fazenda Aliança' },
-  { id: 'f3', name: 'Fazenda Boqueirão' }
-];
-
-const FIELDS: Field[] = [
-  { id: 't1', farmId: 'f1', name: 'Talhão Norte 01', area: 150.5 },
-  { id: 't2', farmId: 'f1', name: 'Talhão Central 02', area: 85.2 },
-  { id: 't3', farmId: 'f2', name: 'Gleba Leste A', area: 240.0 },
-  { id: 't4', farmId: 'f1', name: 'Talhão Sul 03', area: 110.0 },
-  { id: 't5', farmId: 'f3', name: 'Talhão 10', area: 300.0 }
-];
-
 const MACHINE_TYPES = ['Pulverizador Terrestre', 'Avião Agrícola', 'Drone de Pulverização'];
-
-const MACHINES: Machine[] = [
-  { id: 'm1', name: 'John Deere 4730', type: 'Pulverizador Terrestre', tankCapacity: 3000 },
-  { id: 'm2', name: 'Stara Imperador 3.0', type: 'Pulverizador Terrestre', tankCapacity: 2400 },
-  { id: 'm3', name: 'Air Tractor 502', type: 'Avião Agrícola', tankCapacity: 1900 },
-  { id: 'm4', name: 'DJI Agras T40', type: 'Drone de Pulverização', tankCapacity: 40 }
-];
-
-const OPERATORS = [
-  { id: 'o1', name: 'Carlos Agrônomo' },
-  { id: 'o2', name: 'Yure Técnico' },
-  { id: 'o3', name: 'André Operador' }
-];
-
-const INSUMOS: Insumo[] = [
-  { id: 'p1', name: 'Glifosato 480', activeIngredient: 'Glifosato', stock: 5000, minStock: 500, unit: 'L', category: 'Herbicida', physicalStock: 5000, reservedQty: 0, availableQty: 5000, farm: 'SANTO AURELIO' },
-  { id: 'p2', name: 'Fox Xpro', activeIngredient: 'Protioconazol', stock: 120, minStock: 20, unit: 'L', category: 'Fungicida', physicalStock: 120, reservedQty: 0, availableQty: 120, farm: 'ALIANCA' },
-  { id: 'p3', name: 'Aureo', activeIngredient: 'Óleo Metilado', stock: 400, minStock: 50, unit: 'L', category: 'Adjuvante', physicalStock: 400, reservedQty: 0, availableQty: 400, farm: 'SANTO AURELIO' },
-  { id: 'p4', name: 'Curyom', activeIngredient: 'Lufenuron', stock: 300, minStock: 30, unit: 'L', category: 'Inseticida', physicalStock: 300, reservedQty: 0, availableQty: 300, farm: 'BOQUEIRAO' }
-];
-
 const APPLICATION_TYPES = ['HERBICIDA', 'FUNGICIDA', 'INSETICIDA', 'ADJUVANTE', 'NUTRIÇÃO FOLIAR'];
 
 interface OrderFormProps {
@@ -55,9 +19,25 @@ interface OrderFormProps {
   existingOrders?: ServiceOrder[];
   onSave: (order: ServiceOrder) => void;
   onCancel: () => void;
+  // Props de dados dinâmicos
+  farms: { id: string, name: string }[];
+  fields: Field[];
+  machines: Machine[];
+  operators: { id: string, name: string }[];
+  insumos: Insumo[];
 }
 
-const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [], onSave, onCancel }) => {
+const OrderForm: React.FC<OrderFormProps> = ({ 
+  initialData, 
+  existingOrders = [], 
+  onSave, 
+  onCancel,
+  farms,
+  fields,
+  machines,
+  operators,
+  insumos
+}) => {
   const [step, setStep] = useState<'FORM' | 'SUMMARY' | 'SUCCESS'>('FORM');
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -65,7 +45,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
   const [formData, setFormData] = useState({
     id: initialData?.id || '',
     farmId: initialData?.farmId || '',
-    fieldIds: initialData?.fieldIds || (initialData?.fieldNames ? [] : []), // If editing old data we'd need to map it, but assuming new standard
+    fieldIds: initialData?.fieldIds || (initialData?.fieldNames ? [] : []), 
     orderNumber: initialData?.orderNumber || '',
     culture: initialData?.culture || '',
     variety: initialData?.variety || '',
@@ -87,15 +67,15 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
 
   const [items, setItems] = useState<OSItem[]>(initialData?.items || []);
 
-  const selectedFarm = useMemo(() => FARMS.find(f => f.id === formData.farmId), [formData.farmId]);
+  const selectedFarm = useMemo(() => farms.find(f => f.id === formData.farmId), [formData.farmId, farms]);
   
   const availableFields = useMemo(() => 
-    FIELDS.filter(f => f.farmId === formData.farmId), 
-  [formData.farmId]);
+    fields.filter(f => f.farmId === formData.farmId), 
+  [formData.farmId, fields]);
 
   const selectedFields = useMemo(() => 
-    FIELDS.filter(f => formData.fieldIds.includes(f.id)), 
-  [formData.fieldIds]);
+    fields.filter(f => formData.fieldIds.includes(f.id)), 
+  [formData.fieldIds, fields]);
 
   const stats = useMemo(() => {
     const area = selectedFields.reduce((sum, f) => sum + f.area, 0);
@@ -106,11 +86,14 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
     return { area, totalVolume, haPerTank };
   }, [selectedFields, formData.flowRate, formData.tankCapacity]);
 
+  const selectedMachine = useMemo(() => machines.find(m => m.id === formData.machineId), [formData.machineId, machines]);
+  const selectedOperator = useMemo(() => operators.find(o => o.id === formData.operatorId), [formData.operatorId, operators]);
+
   useEffect(() => {
     if (selectedMachine && !initialData) {
       setFormData(prev => ({ ...prev, tankCapacity: selectedMachine.tankCapacity }));
     }
-  }, [formData.machineId, initialData]);
+  }, [formData.machineId, initialData, selectedMachine]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -121,9 +104,6 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const selectedMachine = useMemo(() => MACHINES.find(m => m.id === formData.machineId), [formData.machineId]);
-  const selectedOperator = useMemo(() => OPERATORS.find(o => o.id === formData.operatorId), [formData.operatorId]);
 
   const handleGenerateSequence = () => {
     const currentYear = new Date().getFullYear().toString();
@@ -174,7 +154,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
   };
 
   const updateItem = (index: number, insumoId: string, dose: number) => {
-    const insumo = INSUMOS.find(i => i.id === insumoId);
+    const insumo = insumos.find(i => i.id === insumoId);
     if (!insumo) return;
     const area = stats.area;
     const haPerTank = stats.haPerTank;
@@ -224,6 +204,15 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
     onSave(finalOrder);
     setStep('SUCCESS');
   };
+
+  // Filtrar insumos da fazenda selecionada (opcional, ou mostrar todos)
+  const availableInsumos = useMemo(() => {
+    if (!formData.farmId) return insumos;
+    // Tenta filtrar por fazenda se o insumo tiver essa info, senao mostra todos ou filtra pelo nome da fazenda se estiver normalizado
+    const farmName = farms.find(f => f.id === formData.farmId)?.name;
+    if (!farmName) return insumos;
+    return insumos.filter(i => i.farm === farmName || i.availableQty > 0);
+  }, [insumos, formData.farmId, farms]);
 
   if (step === 'SUCCESS') {
     return (
@@ -376,7 +365,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Propriedade</label>
               <select name="farmId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all appearance-none cursor-pointer" value={formData.farmId} onChange={handleInputChange}>
                 <option value="">SELECIONE A FAZENDA</option>
-                {FARMS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
             
@@ -515,14 +504,15 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Responsável</label>
               <select name="operatorId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all" value={formData.operatorId} onChange={handleInputChange}>
                 <option value="">SELECIONE O OPERADOR</option>
-                {OPERATORS.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                {operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Identificação da Máquina</label>
               <select name="machineId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50" value={formData.machineId} onChange={handleInputChange} disabled={!formData.machineType}>
                 <option value="">MODELO ALOCADO</option>
-                {MACHINES.filter(m => m.type === formData.machineType).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                {/* Filtrar máquinas que correspondem ao tipo selecionado, ou mostrar todas se não houver tipo definido no DB ainda */}
+                {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
           </div>
@@ -573,7 +563,7 @@ const OrderForm: React.FC<OrderFormProps> = ({ initialData, existingOrders = [],
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Produto Composto</label>
                       <select className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={item.insumoId} onChange={(e) => updateItem(idx, e.target.value, item.dosePerHa)}>
                         <option value="">BUSCAR NO ALMOXARIFADO...</option>
-                        {INSUMOS.map(ins => <option key={ins.id} value={ins.id}>{ins.name}</option>)}
+                        {availableInsumos.map(ins => <option key={ins.id} value={ins.id}>{ins.name} ({ins.farm})</option>)}
                       </select>
                     </div>
                     <div className="md:col-span-1 space-y-2">

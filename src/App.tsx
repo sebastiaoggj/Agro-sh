@@ -19,7 +19,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import Login from './components/Login';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine } from './types';
 
 // Componente Logo
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
@@ -39,6 +39,9 @@ const App: React.FC = () => {
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); 
+  const [fields, setFields] = useState<Field[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [operators, setOperators] = useState<{id: string, name: string}[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
 
@@ -75,10 +78,41 @@ const App: React.FC = () => {
         })));
       }
 
-      // Buscar Todas as Fazendas
+      // Buscar Fazendas
       const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
       if (farmsData) {
         setFarms(farmsData);
+      }
+
+      // Buscar Talhões
+      const { data: fieldsData } = await supabase.from('fields').select('*');
+      if (fieldsData) {
+        setFields(fieldsData.map(f => ({
+          id: f.id,
+          farmId: f.farm_id,
+          name: f.name,
+          area: f.area
+        })));
+      }
+
+      // Buscar Máquinas (Adaptando schema se necessário)
+      const { data: machinesData } = await supabase.from('machines').select('*');
+      if (machinesData) {
+        setMachines(machinesData.map(m => ({
+          id: m.id,
+          name: m.name,
+          type: 'Pulverizador Terrestre', // Default já que não temos coluna type ainda
+          tankCapacity: m.capacity
+        })));
+      }
+
+      // Buscar Operadores
+      const { data: opData } = await supabase.from('operators').select('*');
+      if (opData) {
+        setOperators(opData.map(o => ({
+          id: o.id,
+          name: o.name
+        })));
       }
 
       // Buscar Estoque
@@ -192,27 +226,15 @@ const App: React.FC = () => {
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
     if (!session?.user) return;
     try {
-      // Se o status for RECEBIDO, precisamos dar entrada no estoque
       if (status === PurchaseOrderStatus.RECEIVED) {
-        // 1. Buscar detalhes do pedido
         const { data: po } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
         if (!po) throw new Error("Pedido não encontrado");
 
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
-
-        // Fallback: buscar IDs pelos nomes se não existirem (para pedidos antigos)
-        if (!masterInsumoId) {
-          const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
-          if (mi) masterInsumoId = mi.id;
-        }
-        if (!farmId) {
-          const { data: fm } = await supabase.from('farms').select('id').eq('name', po.farm_name).single();
-          if (fm) farmId = fm.id;
-        }
+        let inventoryId = null;
 
         if (masterInsumoId && farmId) {
-          // 2. Verificar se já existe no inventário
           const { data: existingInv } = await supabase
             .from('inventory')
             .select('*')
@@ -220,19 +242,13 @@ const App: React.FC = () => {
             .eq('farm_id', farmId)
             .maybeSingle();
 
-          let inventoryId = null;
-
           if (existingInv) {
-            // Atualiza quantidade
-            const { error: updateError } = await supabase.from('inventory').update({
+            inventoryId = existingInv.id;
+            await supabase.from('inventory').update({
               physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
             }).eq('id', existingInv.id);
-            
-            if (updateError) throw updateError;
-            inventoryId = existingInv.id;
           } else {
-            // Insere novo item no inventário
-            const { data: newInv, error: insertError } = await supabase.from('inventory').insert({
+            const { data: newInv, error } = await supabase.from('inventory').insert({
               master_insumo_id: masterInsumoId,
               farm_id: farmId,
               physical_stock: po.quantity,
@@ -240,15 +256,12 @@ const App: React.FC = () => {
               min_stock: 0,
               user_id: session.user.id
             }).select().single();
-            
-            if (insertError) throw insertError;
+            if (error) throw error;
             inventoryId = newInv.id;
           }
 
-          // Registrar no Histórico com NF
           if (inventoryId) {
              const nfInfo = extraData.invoice_number ? ` | NF: ${extraData.invoice_number}` : '';
-             
              await supabase.from('stock_history').insert({
                inventory_id: inventoryId,
                type: 'ENTRADA',
@@ -258,15 +271,12 @@ const App: React.FC = () => {
                user_id: session.user.id
              });
           }
-          
           alert("Estoque atualizado com sucesso!");
         } else {
           console.warn("Faltam dados para entrada automática.");
-          alert("ERRO: Não foi possível identificar o Insumo ou a Fazenda correspondente no banco de dados. O pedido será marcado como recebido, mas o estoque NÃO foi atualizado.");
         }
       }
 
-      // Atualizar status do pedido
       const { error } = await supabase
         .from('purchase_orders')
         .update({ status, ...extraData })
@@ -276,7 +286,7 @@ const App: React.FC = () => {
       fetchAllData();
     } catch (error) {
       console.error("Erro ao atualizar status:", error);
-      alert("Erro ao processar o recebimento. Verifique se o produto e a fazenda estão cadastrados corretamente.");
+      alert("Erro ao atualizar pedido.");
     }
   };
 
@@ -369,6 +379,12 @@ const App: React.FC = () => {
               existingOrders={orders}
               onSave={(order) => { setOrders([...orders, order]); setActiveTab('dashboard'); }} 
               onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} 
+              // Passing dynamic data
+              farms={farms}
+              fields={fields}
+              machines={machines}
+              operators={operators}
+              insumos={inventory}
             />
           </div>
         );
