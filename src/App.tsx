@@ -235,8 +235,8 @@ const App: React.FC = () => {
             { id: 'calendar', label: 'Calendário', icon: Calendar },
             { id: 'reports', label: 'Relatórios', icon: ClipboardList },
             { id: 'inventory', label: 'Estoque', icon: Package },
-            { id: 'master_insumos', label: 'Insumos', icon: Beaker },
             { id: 'purchases', label: 'Pedidos', icon: ShoppingCart },
+            { id: 'master_insumos', label: 'Insumos', icon: Beaker },
             { id: 'fleet', label: 'Frota', icon: Truck },
             { id: 'areas', label: 'Áreas', icon: MapIcon },
           ].map(item => (
