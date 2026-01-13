@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Tractor, 
   Users, 
@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   ChevronDown
 } from 'lucide-react';
+import { supabase } from '../integrations/supabase/client';
 
 interface Machine {
   id: string;
@@ -33,9 +34,7 @@ interface Operator {
 }
 
 const FleetManagement: React.FC = () => {
-  // Inicializando vazio para refletir o banco de dados
-  const FARMS: { id: string; name: string }[] = []; 
-
+  const [farms, setFarms] = useState<{ id: string; name: string }[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
 
@@ -47,8 +46,50 @@ const FleetManagement: React.FC = () => {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({ farmIds: [] });
 
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // 1. Buscar Fazendas para o Select
+      const { data: farmsData } = await supabase.from('farms').select('id, name');
+      if (farmsData) setFarms(farmsData);
+
+      // 2. Buscar Máquinas
+      const { data: machinesData } = await supabase.from('machines').select('*');
+      if (machinesData) {
+        // Mapear IDs para Nomes de fazenda
+        const formattedMachines = machinesData.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          capacity: m.capacity,
+          farmIds: m.farm_ids || [],
+          farmNames: (m.farm_ids || []).map((fid: string) => farmsData?.find(f => f.id === fid)?.name || 'N/A')
+        }));
+        setMachines(formattedMachines);
+      }
+
+      // 3. Buscar Operadores
+      const { data: opsData } = await supabase.from('operators').select('*');
+      if (opsData) {
+        const formattedOps = opsData.map((o: any) => ({
+          id: o.id,
+          name: o.name,
+          createdAt: new Date(o.created_at).toLocaleDateString('pt-BR'),
+          farmIds: o.farm_ids || [],
+          farmNames: (o.farm_ids || []).map((fid: string) => farmsData?.find(f => f.id === fid)?.name || 'N/A')
+        }));
+        setOperators(formattedOps);
+      }
+
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+    }
+  };
 
   // Filtros
   const filteredMachines = useMemo(() => {
@@ -70,27 +111,52 @@ const FleetManagement: React.FC = () => {
   const handleOpenModal = (type: 'machine' | 'operator', item: any = null) => {
     setModalType(type);
     setEditingItem(item);
-    setFormData(item || { farmIds: [], name: '', capacity: '' });
+    // Se for edição, garante que farmIds exista, senão inicia array vazio
+    setFormData(item ? { ...item, farmIds: item.farmIds || [] } : { farmIds: [], name: '', capacity: '' });
     setModalOpen(true);
   };
 
-  const handleSave = () => {
-    const selectedFarmNames = FARMS.filter(f => formData.farmIds.includes(f.id)).map(f => f.name);
-    
-    if (modalType === 'machine') {
-      if (editingItem) {
-        setMachines(machines.map(m => m.id === editingItem.id ? { ...m, ...formData, farmNames: selectedFarmNames } : m));
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      if (modalType === 'machine') {
+        const payload = {
+          name: formData.name,
+          capacity: formData.capacity,
+          farm_ids: formData.farmIds,
+          user_id: user.id
+        };
+
+        if (editingItem) {
+          await supabase.from('machines').update(payload).eq('id', editingItem.id);
+        } else {
+          await supabase.from('machines').insert(payload);
+        }
       } else {
-        setMachines([...machines, { ...formData, id: Date.now().toString(), farmNames: selectedFarmNames }]);
+        const payload = {
+          name: formData.name,
+          farm_ids: formData.farmIds,
+          user_id: user.id
+        };
+
+        if (editingItem) {
+          await supabase.from('operators').update(payload).eq('id', editingItem.id);
+        } else {
+          await supabase.from('operators').insert(payload);
+        }
       }
-    } else {
-      if (editingItem) {
-        setOperators(operators.map(o => o.id === editingItem.id ? { ...o, ...formData, farmNames: selectedFarmNames } : o));
-      } else {
-        setOperators([...operators, { ...formData, id: Date.now().toString(), createdAt: new Date().toLocaleDateString('pt-BR'), farmNames: selectedFarmNames }]);
-      }
+
+      await fetchData(); // Recarregar lista
+      setModalOpen(false);
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      alert('Erro ao salvar registro.');
+    } finally {
+      setLoading(false);
     }
-    setModalOpen(false);
   };
 
   const handleToggleFarm = (farmId: string) => {
@@ -99,6 +165,18 @@ const FleetManagement: React.FC = () => {
       setFormData({ ...formData, farmIds: currentIds.filter(id => id !== farmId) });
     } else {
       setFormData({ ...formData, farmIds: [...currentIds, farmId] });
+    }
+  };
+
+  const handleDelete = async (id: string, type: 'machine' | 'operator') => {
+    if (!confirm('Tem certeza que deseja excluir este registro?')) return;
+    
+    try {
+      const table = type === 'machine' ? 'machines' : 'operators';
+      await supabase.from(table).delete().eq('id', id);
+      await fetchData();
+    } catch (error) {
+      console.error('Erro ao excluir:', error);
     }
   };
 
@@ -126,7 +204,7 @@ const FleetManagement: React.FC = () => {
                 onChange={(e) => setFarmFilter(e.target.value)}
               >
                 <option value="all">Todas as Fazendas</option>
-                {FARMS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
             </div>
@@ -178,7 +256,7 @@ const FleetManagement: React.FC = () => {
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
                         <MapPin size={12} className="text-emerald-500 shrink-0" />
-                        {m.farmNames.join(', ') || 'Global'}
+                        {m.farmNames.length > 0 ? m.farmNames.join(', ') : 'Global'}
                       </div>
                     </td>
                     <td className="px-8 py-5">
@@ -200,7 +278,7 @@ const FleetManagement: React.FC = () => {
                         <button onClick={() => handleOpenModal('machine', m)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
                           <Edit2 size={16} />
                         </button>
-                        <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                        <button onClick={() => handleDelete(m.id, 'machine')} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -250,7 +328,7 @@ const FleetManagement: React.FC = () => {
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase max-w-[200px] flex-wrap">
                         <MapPin size={12} className="text-blue-500 shrink-0" />
-                        {o.farmNames.join(', ') || 'Global'}
+                        {o.farmNames.length > 0 ? o.farmNames.join(', ') : 'Global'}
                       </div>
                     </td>
                     <td className="px-8 py-5">
@@ -272,7 +350,7 @@ const FleetManagement: React.FC = () => {
                         <button onClick={() => handleOpenModal('operator', o)} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">
                           <Edit2 size={16} />
                         </button>
-                        <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+                        <button onClick={() => handleDelete(o.id, 'operator')} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -324,7 +402,7 @@ const FleetManagement: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazendas (opcional)</label>
                 <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 max-h-48 overflow-y-auto space-y-2">
-                  {FARMS.length > 0 ? FARMS.map(farm => (
+                  {farms.length > 0 ? farms.map(farm => (
                     <label key={farm.id} className="flex items-center gap-3 cursor-pointer group p-1">
                       <div 
                         onClick={() => handleToggleFarm(farm.id)}
@@ -362,15 +440,17 @@ const FleetManagement: React.FC = () => {
               <button 
                 onClick={() => setModalOpen(false)}
                 className="flex-1 px-6 py-4 rounded-2xl text-slate-500 dark:text-slate-400 font-bold hover:bg-slate-200 dark:hover:bg-slate-800 transition-all"
+                disabled={loading}
               >
                 Cancelar
               </button>
               <button 
                 onClick={handleSave}
-                className={`flex-1 ${modalType === 'machine' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'} text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98]`}
+                className={`flex-1 ${modalType === 'machine' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'} text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-50`}
+                disabled={loading}
               >
                 <Save size={20} />
-                SALVAR
+                {loading ? 'SALVANDO...' : 'SALVAR'}
               </button>
             </div>
           </div>
