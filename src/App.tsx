@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [farmNames, setFarmNames] = useState<string[]>([]); // Nova lista de nomes de fazendas
   
   // Estados mockados (ainda não migrados para o banco nesta etapa)
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -77,6 +78,16 @@ const App: React.FC = () => {
           price: item.price,
           defaultPurchaseQty: item.default_purchase_qty
         })));
+      }
+
+      // Buscar Todas as Fazendas (para dropdowns)
+      const { data: farmsData } = await supabase
+        .from('farms')
+        .select('name')
+        .order('name');
+      
+      if (farmsData) {
+        setFarmNames(farmsData.map(f => f.name));
       }
 
       // Buscar Estoque
@@ -177,7 +188,7 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <PurchaseOrders 
               orders={purchaseOrders}
-              farms={inventory.map(i => i.farm).filter((v, i, a) => a.indexOf(v) === i)}
+              farms={farmNames} // Usando a lista completa de fazendas do banco
               masterInsumos={masterInsumos}
               onApprove={() => {}}
               onReceive={() => {}}
@@ -224,8 +235,8 @@ const App: React.FC = () => {
             { id: 'calendar', label: 'Calendário', icon: Calendar },
             { id: 'reports', label: 'Relatórios', icon: ClipboardList },
             { id: 'inventory', label: 'Estoque', icon: Package },
-            { id: 'purchases', label: 'Pedidos', icon: ShoppingCart },
             { id: 'master_insumos', label: 'Insumos', icon: Beaker },
+            { id: 'purchases', label: 'Pedidos', icon: ShoppingCart },
             { id: 'fleet', label: 'Frota', icon: Truck },
             { id: 'areas', label: 'Áreas', icon: MapIcon },
           ].map(item => (
