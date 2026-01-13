@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Sprout, 
@@ -30,7 +29,7 @@ interface AreaSectionProps {
 const AreaSection: React.FC<AreaSectionProps> = ({ 
   title, icon: Icon, color, buttonLabel, countLabel, items, onAdd, onEdit, onDelete, renderItem 
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
 
   return (
     <div className="bg-white border border-slate-200 rounded-[1.5rem] overflow-hidden shadow-sm transition-all duration-300">
@@ -95,23 +94,10 @@ const AreaSection: React.FC<AreaSectionProps> = ({
 };
 
 const AreasFields: React.FC = () => {
-  const [crops, setCrops] = useState([
-    { id: 'c1', name: 'Soja', variety: 'M 6410 IPRO', color: 'text-emerald-500' },
-    { id: 'c2', name: 'Milho', variety: 'DKB 390 PRO3', color: 'text-amber-500' },
-    { id: 'c3', name: 'Algodão', variety: 'FM 985 GLT', color: 'text-slate-400' },
-  ]);
-
-  const [farms, setFarms] = useState([
-    { id: 'f1', name: 'Fazenda Santo Aurélio', location: 'Sorriso - MT', area: 4200 },
-    { id: 'f2', name: 'Fazenda Aliança', location: 'Lucas do Rio Verde - MT', area: 1850 },
-    { id: 'f3', name: 'Sítio Novo Horizonte', location: 'Nova Mutum - MT', area: 450 },
-  ]);
-
-  const [fields, setFields] = useState([
-    { id: 't1', name: 'Talhão Norte 01', farmId: 'f1', farmName: 'Fazenda Santo Aurélio', area: 150 },
-    { id: 't2', name: 'Talhão Central 02', farmId: 'f1', farmName: 'Fazenda Santo Aurélio', area: 85 },
-    { id: 't3', name: 'Gleba Leste A', farmId: 'f2', farmName: 'Fazenda Aliança', area: 240 },
-  ]);
+  // Inicializando estados vazios para limpar os dados de exemplo
+  const [crops, setCrops] = useState<any[]>([]);
+  const [farms, setFarms] = useState<any[]>([]);
+  const [fields, setFields] = useState<any[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
