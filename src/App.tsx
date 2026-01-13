@@ -288,7 +288,6 @@ const App: React.FC = () => {
     if (!session?.user) return false;
     try {
       // Filtrar itens vazios antes de enviar para o DB
-      // Isso previne que o Trigger/Function falhe ao tentar ler UUIDs inválidos
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
       
       // Verificar Disponibilidade de Estoque ANTES de definir o status
@@ -299,9 +298,12 @@ const App: React.FC = () => {
          finalStatus = hasStock ? OrderStatus.EMITTED : OrderStatus.AWAITING_PRODUCT;
       }
 
+      // Função auxiliar para converter string vazia em NULL (para UUIDs opcionais)
+      const toNullable = (val: string | undefined) => (!val || val.trim() === '') ? null : val;
+
       const payload = {
         order_number: order.orderNumber,
-        farm_id: order.farmId,
+        farm_id: order.farmId, // Obrigatório
         farm_name: order.farmName,
         field_ids: order.fieldIds,
         field_names: order.fieldNames,
@@ -310,15 +312,15 @@ const App: React.FC = () => {
         recommendation_date: order.recommendationDate,
         max_application_date: order.maxApplicationDate,
         machine_type: order.machineType,
-        machine_id: order.machineId,
+        machine_id: toNullable(order.machineId), // Opcional
         machine_name: order.machineName,
-        operator_id: order.operatorId,
+        operator_id: toNullable(order.operatorId), // Opcional
         tank_capacity: order.tankCapacity,
         flow_rate: order.flowRate,
         total_area: order.totalArea,
         total_volume: order.totalVolume,
         status: finalStatus,
-        items: validItems, // Enviando apenas itens válidos
+        items: validItems, 
         user_id: session.user.id
       };
 
@@ -336,7 +338,6 @@ const App: React.FC = () => {
       }, 500);
 
       setEditingOrder(null);
-      // setActiveTab('dashboard'); // Removido para deixar o OrderForm controlar a tela de sucesso
       
       if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
         alert("Ordem criada com status 'Aguardando Produto' por falta de estoque suficiente.");
@@ -344,9 +345,11 @@ const App: React.FC = () => {
 
       return true;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar OS:", error);
-      alert("Erro ao salvar ordem de serviço. Verifique os dados e tente novamente.");
+      // Exibir mensagem de erro mais detalhada se disponível
+      const msg = error.message || error.details || "Erro desconhecido";
+      alert(`Erro ao salvar ordem de serviço: ${msg}`);
       return false;
     }
   };
@@ -433,9 +436,9 @@ const App: React.FC = () => {
          fetchAllData();
       }, 500);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao atualizar status da OS:", error);
-      alert("Erro ao atualizar status: " + error.message);
+      alert("Erro ao atualizar status: " + (error.message || "Erro desconhecido"));
     }
   };
 
@@ -463,8 +466,8 @@ const App: React.FC = () => {
       const { error } = await supabase.from('service_orders').delete().eq('id', id);
       if (error) throw error;
 
-      // Trigger cuida do recálculo
-      setTimeout(() => {
+      setTimeout(async () => {
+         await supabase.rpc('recalculate_stock_reservations');
          fetchAllData();
       }, 500);
 
