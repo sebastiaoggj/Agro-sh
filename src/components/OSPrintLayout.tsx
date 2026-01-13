@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Sprout, MapPin, Calendar, Tractor, User, 
   Droplets, Gauge, Wind, AlertTriangle, 
-  Info, Hash, CheckCircle2
+  Info, Hash, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import { ServiceOrder } from '../types';
 
@@ -12,7 +12,15 @@ interface OSPrintLayoutProps {
 
 const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
   // Cálculos para o layout
-  const tankCount = order.tankCapacity > 0 ? (order.totalVolume / order.tankCapacity).toFixed(1) : '0';
+  const flowRate = order.flowRate || 1;
+  const totalVolume = order.totalVolume;
+  const tankCapacity = order.tankCapacity;
+  
+  // Recalcula para exibição
+  const numberOfTanksExact = tankCapacity > 0 ? totalVolume / tankCapacity : 0;
+  const numberOfTanksFull = Math.floor(numberOfTanksExact);
+  const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
+  const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCapacity) : 0;
   
   return (
     <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 text-slate-900 overflow-hidden">
@@ -109,8 +117,8 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             <div className="flex items-start gap-3">
               <Gauge size={16} className="text-slate-400 mt-0.5" />
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">Pressão / Bico</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.pressure || '-'} / {order.nozzle || '-'}</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">Configuração</span>
+                <span className="text-sm font-black uppercase text-slate-900">{order.pressure} / {order.nozzle || '-'}</span>
               </div>
             </div>
           </div>
@@ -131,14 +139,14 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             <Wind size={14} className="text-slate-400" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Velocidade</span>
           </div>
-          <p className="text-2xl font-black text-slate-900">{order.speed || '-'}<span className="text-xs ml-1 font-bold text-slate-400">Km/h</span></p>
+          <p className="text-2xl font-black text-slate-900">{order.speed || '-'}</p>
         </div>
         <div className="border border-slate-200 border-l-4 border-l-orange-500 rounded-lg p-3 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
             <Hash size={14} className="text-slate-400" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tanques</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tanques Cheios</span>
           </div>
-          <p className="text-2xl font-black text-slate-900">{tankCount}</p>
+          <p className="text-2xl font-black text-slate-900">{numberOfTanksFull}</p>
         </div>
         <div className="border border-slate-200 border-l-4 border-l-indigo-500 rounded-lg p-3 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
@@ -149,11 +157,10 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
         </div>
       </div>
 
-      {/* Dosage Table */}
+      {/* Dosage Table - Full Tank */}
       <div className="mb-6 border border-slate-800 rounded-xl overflow-hidden">
         <div className="bg-emerald-100 p-2 border-b border-emerald-200 flex items-center justify-between px-4">
-           <span className="text-xs font-black uppercase tracking-widest text-emerald-800">Receituário Agronômico</span>
-           <span className="text-xs font-black uppercase tracking-widest text-emerald-800">Base: Tanque Cheio ({order.tankCapacity} L)</span>
+           <span className="text-xs font-black uppercase tracking-widest text-emerald-800">Receituário: Tanque Cheio ({order.tankCapacity} L)</span>
         </div>
         <table className="w-full text-left">
           <thead>
@@ -176,6 +183,38 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           </tbody>
         </table>
       </div>
+
+      {/* Partial Tank Table - If Exists */}
+      {hasPartialTank && (
+        <div className="mb-6 border border-amber-300 rounded-xl overflow-hidden">
+          <div className="bg-amber-100 p-2 border-b border-amber-200 flex items-center justify-between px-4">
+             <div className="flex items-center gap-2">
+               <AlertCircle size={16} className="text-amber-600" />
+               <span className="text-xs font-black uppercase tracking-widest text-amber-800">Instrução para Último Tanque (Parcial)</span>
+             </div>
+             <span className="text-xs font-black uppercase tracking-widest text-amber-800">Volume de Calda: {partialTankVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L</span>
+          </div>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-amber-50/50 border-b border-amber-100 text-[10px] uppercase font-black tracking-widest text-amber-700">
+                <th className="px-4 py-2">Produto</th>
+                <th className="px-4 py-2 text-right">Quantidade para Mistura</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-amber-100 text-sm">
+              {order.items.map((item, idx) => {
+                 const partialQty = (item.qtyPerTank / order.tankCapacity) * partialTankVolume;
+                 return (
+                  <tr key={idx}>
+                    <td className="px-4 py-3 font-bold text-slate-800 uppercase">{item.productName}</td>
+                    <td className="px-4 py-3 text-right font-black text-amber-700">{partialQty.toFixed(2)}</td>
+                  </tr>
+                 );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Warnings */}
       <div className="border border-red-200 bg-red-50 rounded-xl p-4 mb-4">
