@@ -271,22 +271,13 @@ const App: React.FC = () => {
 
       if (canRelease) {
         await supabase.from('service_orders').update({ status: OrderStatus.EMITTED }).eq('id', order.id);
-        
-        for (const item of items) {
-           if (item.insumoId) {
-             await supabase.rpc('adjust_stock_reservation', {
-               row_id: item.insumoId,
-               quantity: item.qtyTotal
-             });
-             const currentAvailable = freshInventoryMap.get(item.insumoId) || 0;
-             freshInventoryMap.set(item.insumoId, currentAvailable - item.qtyTotal);
-           }
-        }
+        // Após liberar, o recálculo global abaixo vai ajustar as reservas
         updatedCount++;
       }
     }
 
     if (updatedCount > 0) {
+      await supabase.rpc('recalculate_stock_reservations'); // Garante consistência
       alert(`${updatedCount} ordens que aguardavam produto foram liberadas automaticamente!`);
       fetchAllData();
     }
@@ -333,18 +324,11 @@ const App: React.FC = () => {
       } else {
          const { error } = await supabase.from('service_orders').insert(payload);
          if (error) throw error;
-
-         if (finalStatus === OrderStatus.EMITTED && order.items && order.items.length > 0) {
-           for (const item of order.items) {
-             if (item.insumoId) {
-               await supabase.rpc('adjust_stock_reservation', {
-                 row_id: item.insumoId,
-                 quantity: item.qtyTotal
-               });
-             }
-           }
-         }
       }
+
+      // CRÍTICO: Recalcular reservas globalmente após salvar para garantir consistência
+      // Isso substitui qualquer lógica manual de ajuste e evita erros em edições
+      await supabase.rpc('recalculate_stock_reservations');
 
       setEditingOrder(null);
       setActiveTab('dashboard');
@@ -368,16 +352,20 @@ const App: React.FC = () => {
 
       const items = currentOrder.items as any[];
 
-      // 1. INICIAR (EMITTED -> IN_PROGRESS): BAIXA TOTAL E REMOVE RESERVA
+      // 1. INICIAR (EMITTED -> IN_PROGRESS): BAIXA TOTAL FÍSICA
       if (newStatus === OrderStatus.IN_PROGRESS && currentOrder.status === OrderStatus.EMITTED) {
         if (items) {
           for (const item of items) {
-             // Remove reserva e desconta do físico
-             await supabase.rpc('finalize_stock_usage', {
-               row_id: item.insumoId,
-               qty_to_unreserve: item.qtyTotal, // Remove toda a reserva
-               qty_to_deduct: item.qtyTotal     // Desconta todo o planejado
-             });
+             // Desconta do físico APENAS. A reserva será corrigida pelo recalculate abaixo.
+             // Usamos update direto pois o RPC anterior (finalize_stock_usage) também mexia na reserva
+             // e queremos deixar o recalculate cuidar da reserva.
+             
+             // Buscar estoque atual
+             const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
+             if (invItem) {
+                const newStock = Math.max(0, Number(invItem.physical_stock) - Number(item.qtyTotal));
+                await supabase.from('inventory').update({ physical_stock: newStock }).eq('id', item.insumoId);
+             }
 
              await supabase.from('stock_history').insert({
                inventory_id: item.insumoId,
@@ -399,13 +387,6 @@ const App: React.FC = () => {
              
              // Se houver sobra, devolve ao estoque físico
              if (leftoverQty > 0) {
-               await supabase.rpc('adjust_stock_reservation', {
-                 row_id: item.insumoId,
-                 quantity: 0 // Não mexe na reserva (já foi zerada no inicio)
-               });
-               
-               // Adicionar saldo físico manualmente via update ou criar RPC "add_stock"
-               // Vou usar update simples, assumindo concorrência baixa
                const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
                if (invItem) {
                  await supabase.from('inventory').update({
@@ -429,7 +410,7 @@ const App: React.FC = () => {
       // 3. CANCELAR (QUALQUER -> CANCELLED)
       else if (newStatus === OrderStatus.CANCELLED) {
          if (items) {
-           // Se estava EM ANDAMENTO, já tinha baixado o estoque. Precisa devolver TUDO.
+           // Se estava EM ANDAMENTO, já tinha baixado o estoque. Precisa devolver TUDO ao físico.
            if (currentOrder.status === OrderStatus.IN_PROGRESS) {
              for (const item of items) {
                 const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
@@ -449,21 +430,16 @@ const App: React.FC = () => {
                 }
              }
            } 
-           // Se estava EMITIDA, apenas remove a reserva.
-           else if (currentOrder.status === OrderStatus.EMITTED) {
-             for (const item of items) {
-               await supabase.rpc('adjust_stock_reservation', {
-                 row_id: item.insumoId,
-                 quantity: -item.qtyTotal 
-               });
-             }
-           }
-           // Se estava AGUARDANDO PRODUTO, não faz nada com estoque.
+           // Se estava EMITIDA, não precisa mexer no físico. O recalculate vai limpar a reserva.
          }
       }
 
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
+      
+      // CRÍTICO: Recalcular reservas globalmente após mudança de status
+      await supabase.rpc('recalculate_stock_reservations');
+
       fetchAllData();
     } catch (error) {
       console.error("Erro ao atualizar status da OS:", error);
@@ -492,21 +468,14 @@ const App: React.FC = () => {
                }
             }
          }
-         // Se deletar ordem EMITIDA -> Remove Reserva
-         else if (orderToDelete.status === OrderStatus.EMITTED) {
-            for (const item of items) {
-               if (item.insumoId) {
-                 await supabase.rpc('adjust_stock_reservation', {
-                   row_id: item.insumoId,
-                   quantity: -item.qtyTotal
-                 });
-               }
-            }
-         }
       }
 
       const { error } = await supabase.from('service_orders').delete().eq('id', id);
       if (error) throw error;
+
+      // CRÍTICO: Recalcular reservas globalmente após exclusão
+      await supabase.rpc('recalculate_stock_reservations');
+
       fetchAllData();
     } catch (error) {
       console.error("Erro ao excluir OS:", error);
