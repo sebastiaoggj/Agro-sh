@@ -11,6 +11,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
+import OSPrintLayout from './OSPrintLayout';
 
 const MACHINE_TYPES = ['Pulverizador Terrestre', 'Avião Agrícola', 'Drone de Pulverização'];
 const APPLICATION_TYPES = ['HERBICIDA', 'FUNGICIDA', 'INSETICIDA', 'ADJUVANTE', 'NUTRIÇÃO FOLIAR'];
@@ -18,7 +19,7 @@ const APPLICATION_TYPES = ['HERBICIDA', 'FUNGICIDA', 'INSETICIDA', 'ADJUVANTE', 
 interface OrderFormProps {
   initialData?: ServiceOrder | null;
   existingOrders?: ServiceOrder[];
-  onSave: (order: ServiceOrder) => Promise<boolean>; // Agora retorna Promise<boolean>
+  onSave: (order: ServiceOrder) => Promise<boolean>; 
   onCancel: () => void;
   // Props de dados dinâmicos
   farms: { id: string, name: string }[];
@@ -42,6 +43,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const [step, setStep] = useState<'FORM' | 'SUMMARY' | 'SUCCESS'>('FORM');
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savedOrder, setSavedOrder] = useState<ServiceOrder | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState({
@@ -214,6 +216,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setIsSaving(false);
     
     if (success) {
+      setSavedOrder(finalOrder); // Salva a ordem no estado para impressão
       setStep('SUCCESS');
     }
   };
@@ -227,32 +230,42 @@ const OrderForm: React.FC<OrderFormProps> = ({
     return insumos.filter(i => i.farm === farmName || i.availableQty > 0);
   }, [insumos, formData.farmId, farms]);
 
+  // Handle Printing
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (step === 'SUCCESS') {
     return (
-      <div className="max-w-4xl mx-auto py-12 animate-in zoom-in-95 duration-500 px-4">
-        <div className="bg-white border border-slate-200 rounded-[3rem] p-12 md:p-24 text-center shadow-xl space-y-12 relative overflow-hidden">
-          <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50" />
-          <div className="w-28 h-28 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-emerald-500/30 rotate-3 group hover:rotate-6 transition-transform">
-            <CheckCircle2 size={56} strokeWidth={2.5} />
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-4xl md:text-6xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
-              {initialData ? 'Atualizado!' : 'Emitido com Sucesso!'}
-            </h2>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-[0.2em] max-w-md mx-auto leading-relaxed">
-              A ordem <span className="text-emerald-600 font-black">#{formData.orderNumber}</span> já está disponível no painel operacional.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-6">
-            <button onClick={() => window.print()} className="w-full sm:w-auto min-w-[240px] bg-slate-900 hover:bg-black text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95">
-              <Printer size={22} /> IMPRIMIR OS
-            </button>
-            <button onClick={onCancel} className="w-full sm:w-auto min-w-[240px] border-2 border-slate-200 hover:bg-slate-50 text-slate-700 py-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95">
-              <LayoutDashboard size={22} /> VOLTAR AO PAINEL
-            </button>
+      <>
+        {/* Renderiza o layout de impressão, mas ele fica invisível (hidden) até a hora de imprimir (print:block) */}
+        {savedOrder && <OSPrintLayout order={savedOrder} />}
+        
+        <div className="max-w-4xl mx-auto py-12 animate-in zoom-in-95 duration-500 px-4 print:hidden">
+          <div className="bg-white border border-slate-200 rounded-[3rem] p-12 md:p-24 text-center shadow-xl space-y-12 relative overflow-hidden">
+            <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50" />
+            <div className="w-28 h-28 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-emerald-500/30 rotate-3 group hover:rotate-6 transition-transform">
+              <CheckCircle2 size={56} strokeWidth={2.5} />
+            </div>
+            <div className="space-y-4">
+              <h2 className="text-4xl md:text-6xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
+                {initialData ? 'Atualizado!' : 'Emitido com Sucesso!'}
+              </h2>
+              <p className="text-slate-500 font-bold uppercase text-xs tracking-[0.2em] max-w-md mx-auto leading-relaxed">
+                A ordem <span className="text-emerald-600 font-black">#{formData.orderNumber}</span> já está disponível no painel operacional.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-6">
+              <button onClick={handlePrint} className="w-full sm:w-auto min-w-[240px] bg-slate-900 hover:bg-black text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95">
+                <Printer size={22} /> IMPRIMIR OS
+              </button>
+              <button onClick={onCancel} className="w-full sm:w-auto min-w-[240px] border-2 border-slate-200 hover:bg-slate-50 text-slate-700 py-6 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95">
+                <LayoutDashboard size={22} /> VOLTAR AO PAINEL
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
