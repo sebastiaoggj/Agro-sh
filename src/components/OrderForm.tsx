@@ -7,7 +7,8 @@ import {
   Settings, ChevronDown, Minus,
   AlertCircle, ChevronLeft, CheckCircle2,
   Printer, Share2, FileText, LayoutDashboard,
-  Sparkles, Check, Search as SearchIcon
+  Sparkles, Check, Search as SearchIcon,
+  Loader2
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
 
@@ -17,7 +18,7 @@ const APPLICATION_TYPES = ['HERBICIDA', 'FUNGICIDA', 'INSETICIDA', 'ADJUVANTE', 
 interface OrderFormProps {
   initialData?: ServiceOrder | null;
   existingOrders?: ServiceOrder[];
-  onSave: (order: ServiceOrder) => void;
+  onSave: (order: ServiceOrder) => Promise<boolean>; // Agora retorna Promise<boolean>
   onCancel: () => void;
   // Props de dados dinâmicos
   farms: { id: string, name: string }[];
@@ -40,6 +41,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 }) => {
   const [step, setStep] = useState<'FORM' | 'SUMMARY' | 'SUCCESS'>('FORM');
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState({
@@ -190,7 +192,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setStep('SUMMARY');
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    
+    // Filtrar itens vazios antes de enviar
+    const validItems = items.filter(i => i.insumoId && i.insumoId !== '');
+    
     const finalOrder: ServiceOrder = {
       ...formData,
       id: formData.id || Date.now().toString(),
@@ -199,10 +207,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
       totalArea: stats.area,
       totalVolume: stats.totalVolume,
       machineName: selectedMachine?.name || '',
-      items: items
+      items: validItems
     };
-    onSave(finalOrder);
-    setStep('SUCCESS');
+
+    const success = await onSave(finalOrder);
+    setIsSaving(false);
+    
+    if (success) {
+      setStep('SUCCESS');
+    }
   };
 
   // Filtrar insumos da fazenda selecionada (opcional, ou mostrar todos)
@@ -308,7 +321,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {items.map((item, idx) => (
+                    {items.filter(i => i.insumoId).map((item, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-8 py-6">
                           <p className="text-sm font-black text-slate-900 uppercase">{item.productName}</p>
@@ -324,18 +337,39 @@ const OrderForm: React.FC<OrderFormProps> = ({
                         </td>
                       </tr>
                     ))}
+                    {items.filter(i => i.insumoId).length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-8 py-6 text-center text-[10px] font-black uppercase text-slate-400">
+                          Nenhum insumo selecionado
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row justify-end gap-6 pt-10 border-t border-slate-100">
-              <button onClick={() => setStep('FORM')} className="px-10 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-all flex items-center justify-center gap-3">
+              <button 
+                onClick={() => setStep('FORM')} 
+                className="px-10 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-all flex items-center justify-center gap-3"
+                disabled={isSaving}
+              >
                 <ChevronLeft size={18} /> EDITAR PARÂMETROS
               </button>
-              <button onClick={handleConfirm} className="px-14 py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-4 transition-all active:scale-95 group">
-                {initialData ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR E EMITIR'}
-                <CheckCircle2 size={22} className="group-hover:rotate-12 transition-transform" />
+              <button 
+                onClick={handleConfirm} 
+                className="px-14 py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-4 transition-all active:scale-95 group disabled:opacity-70 disabled:cursor-not-allowed"
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>SALVANDO <Loader2 size={22} className="animate-spin" /></>
+                ) : (
+                  <>
+                    {initialData ? 'SALVAR ALTERAÇÕES' : 'CONFIRMAR E EMITIR'}
+                    <CheckCircle2 size={22} className="group-hover:rotate-12 transition-transform" />
+                  </>
+                )}
               </button>
             </div>
           </div>
