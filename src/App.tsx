@@ -293,6 +293,7 @@ const App: React.FC = () => {
               stockProp={inventory} 
               onStockUpdate={setInventory} 
               masterInsumos={masterInsumos}
+              farms={farms} // Passando a lista de fazendas
               history={stockHistory}
               onAddHistory={(rec) => setStockHistory(prev => [{...rec, id: Date.now().toString()}, ...prev])}
             />
@@ -312,7 +313,7 @@ const App: React.FC = () => {
           <div className="p-12 h-full">
             <PurchaseOrders 
               orders={purchaseOrders}
-              farms={farms} 
+              farms={farms} // Passando a lista de objetos de fazenda
               masterInsumos={masterInsumos}
               onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)}
               onReceive={(id, supplier, nf) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, { supplier, invoice_number: nf })}

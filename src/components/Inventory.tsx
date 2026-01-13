@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   Package, Search, Filter, History, Plus, X,
@@ -12,15 +11,15 @@ import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 interface InventoryProps {
   stockProp: Insumo[];
   masterInsumos: MasterInsumo[];
+  farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
   onStockUpdate: (data: Insumo[]) => void;
   onAddHistory: (record: Omit<StockHistoryEntry, 'id'>) => void;
 }
 
-const FARMS = ['SANTO AURELIO', 'ALIANCA', 'SAO GERONIMO', 'BOQUEIRAO', 'MANGA'];
 const UNITS = ['LT', 'KG', 'UN', 'PCT', 'GAL'];
 
-const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, history, onStockUpdate, onAddHistory }) => {
+const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onStockUpdate, onAddHistory }) => {
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
@@ -246,7 +245,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, history
               onChange={(e) => setFarmFilter(e.target.value)}
             >
               <option>Todas as Fazendas</option>
-              {FARMS.map(f => <option key={f} value={f}>{f}</option>)}
+              {farms.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
             </select>
             <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
           </div>
@@ -449,7 +448,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, history
                         onChange={(e) => setFormDestFarm(e.target.value)}
                       >
                         <option value="">Selecionar Fazenda...</option>
-                        {FARMS.map(f => <option key={f} value={f}>{f}</option>)}
+                        {farms.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -499,7 +498,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, history
                         onChange={(e) => setFormDestFarm(e.target.value)}
                       >
                         <option value="">Selecionar Destino...</option>
-                        {FARMS.map(f => <option key={f} value={f}>{f}</option>)}
+                        {farms.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
                       </select>
                     </div>
                   </div>
