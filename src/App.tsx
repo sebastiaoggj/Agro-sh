@@ -345,38 +345,30 @@ const App: React.FC = () => {
     }
   };
 
-  // --- NOVA LÓGICA DE ATUALIZAÇÃO DE STATUS ---
+  // --- NOVA LÓGICA DE ATUALIZAÇÃO DE STATUS (USANDO RPC PARA INICIAR) ---
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: Record<string, number> = {}) => {
     try {
+      // 1. INICIAR (EMITTED -> IN_PROGRESS): USAR FUNÇÃO ATÔMICA
+      if (newStatus === OrderStatus.IN_PROGRESS) {
+        const { error } = await supabase.rpc('start_service_order', {
+          p_order_id: id,
+          p_user_id: session?.user.id,
+          p_user_name: session?.user.email?.split('@')[0] || 'Sistema'
+        });
+        
+        if (error) throw error;
+        // Não precisa recalcular manualmente, o RPC já fez isso
+        fetchAllData();
+        return;
+      }
+
+      // Para outros status, mantemos a lógica anterior mas simplificada
       const { data: currentOrder } = await supabase.from('service_orders').select('*').eq('id', id).single();
       if (!currentOrder) return;
-
       const items = currentOrder.items as any[];
-
-      // 1. INICIAR (EMITTED -> IN_PROGRESS): BAIXA TOTAL FÍSICA
-      if (newStatus === OrderStatus.IN_PROGRESS && currentOrder.status === OrderStatus.EMITTED) {
-        if (items) {
-          for (const item of items) {
-             const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
-             if (invItem) {
-                const newStock = Math.max(0, Number(invItem.physical_stock) - Number(item.qtyTotal));
-                await supabase.from('inventory').update({ physical_stock: newStock }).eq('id', item.insumoId);
-             }
-
-             await supabase.from('stock_history').insert({
-               inventory_id: item.insumoId,
-               type: 'SAIDA',
-               description: `Início de Aplicação OS #${currentOrder.order_number}`,
-               quantity: -item.qtyTotal,
-               user_name: session?.user.email?.split('@')[0] || 'Sistema',
-               user_id: session?.user.id
-             });
-          }
-        }
-      }
       
       // 2. FINALIZAR (IN_PROGRESS -> COMPLETED): DEVOLVE SOBRAS SE HOUVER
-      else if (newStatus === OrderStatus.COMPLETED && currentOrder.status === OrderStatus.IN_PROGRESS) {
+      if (newStatus === OrderStatus.COMPLETED && currentOrder.status === OrderStatus.IN_PROGRESS) {
          if (items) {
            for (const item of items) {
              const leftoverQty = leftovers[item.insumoId] || 0;
@@ -430,8 +422,6 @@ const App: React.FC = () => {
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
       
-      // CRÍTICO: Recalcular reservas com pequeno delay para garantir que o banco já comitou a mudança de status
-      // Isso previne que a função de recálculo leia a OS antiga como 'Emitida'
       setTimeout(async () => {
          await supabase.rpc('recalculate_stock_reservations');
          fetchAllData();
@@ -439,7 +429,7 @@ const App: React.FC = () => {
 
     } catch (error) {
       console.error("Erro ao atualizar status da OS:", error);
-      alert("Erro ao atualizar status.");
+      alert("Erro ao atualizar status: " + error.message);
     }
   };
 
