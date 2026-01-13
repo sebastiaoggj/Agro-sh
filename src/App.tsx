@@ -226,7 +226,6 @@ const App: React.FC = () => {
     
     for (const item of items) {
       if (!item.insumoId) continue;
-      // Busca o item no estoque
       const stockItem = currentInventory.find(inv => inv.id === item.insumoId);
       
       // Se não existir ou se a quantidade disponível (Físico - Reservado) for menor que a necessária
@@ -239,7 +238,6 @@ const App: React.FC = () => {
 
   // Função Automática: Liberar Ordens Aguardando Produto
   const triggerAutoRelease = async () => {
-    // 1. Buscar todas as ordens aguardando produto
     const { data: awaitingOrders } = await supabase
       .from('service_orders')
       .select('*')
@@ -247,23 +245,20 @@ const App: React.FC = () => {
 
     if (!awaitingOrders || awaitingOrders.length === 0) return;
 
-    // 2. Buscar inventário atualizado (crucial pegar do banco para garantir consistência)
     const { data: freshInvData } = await supabase.from('inventory').select('*');
     if (!freshInvData) return;
 
     const freshInventoryMap = new Map(freshInvData.map((inv: any) => [
       inv.id, 
-      Number(inv.physical_stock) - Number(inv.reserved_qty) // Qtd Disponível
+      Number(inv.physical_stock) - Number(inv.reserved_qty) 
     ]));
 
     let updatedCount = 0;
 
-    // 3. Verificar cada ordem
     for (const order of awaitingOrders) {
       const items = order.items as OSItem[];
       let canRelease = true;
 
-      // Verifica se TEM estoque para TODOS os itens desta ordem
       for (const item of items) {
         if (item.insumoId) {
           const available = freshInventoryMap.get(item.insumoId) || 0;
@@ -274,19 +269,15 @@ const App: React.FC = () => {
         }
       }
 
-      // 4. Se puder liberar, atualiza status e RESERVA o estoque
       if (canRelease) {
-        // Atualizar status
         await supabase.from('service_orders').update({ status: OrderStatus.EMITTED }).eq('id', order.id);
         
-        // Efetuar Reservas
         for (const item of items) {
            if (item.insumoId) {
              await supabase.rpc('adjust_stock_reservation', {
                row_id: item.insumoId,
                quantity: item.qtyTotal
              });
-             // Atualiza o mapa local para as próximas ordens do loop não usarem o mesmo saldo
              const currentAvailable = freshInventoryMap.get(item.insumoId) || 0;
              freshInventoryMap.set(item.insumoId, currentAvailable - item.qtyTotal);
            }
@@ -308,9 +299,6 @@ const App: React.FC = () => {
       // Verificar Disponibilidade de Estoque ANTES de definir o status
       const hasStock = checkStockAvailability(order.items, inventory);
       
-      // Se tiver estoque -> EMITIDA. Se não -> AGUARDANDO PRODUTO.
-      // Obs: Se o usuário estiver editando e o status já for outro (ex: Em Progresso), mantemos.
-      // Mas se for nova ou status rascunho/emitida, aplicamos a lógica.
       let finalStatus = order.status;
       if (!order.id || order.status === OrderStatus.EMITTED || order.status === OrderStatus.DRAFT || order.status === OrderStatus.AWAITING_PRODUCT) {
          finalStatus = hasStock ? OrderStatus.EMITTED : OrderStatus.AWAITING_PRODUCT;
@@ -346,8 +334,6 @@ const App: React.FC = () => {
          const { error } = await supabase.from('service_orders').insert(payload);
          if (error) throw error;
 
-         // SÓ RESERVA SE O STATUS FOR "EMITIDA"
-         // Se for "AGUARDANDO PRODUTO", NÃO reserva ainda.
          if (finalStatus === OrderStatus.EMITTED && order.items && order.items.length > 0) {
            for (const item of order.items) {
              if (item.insumoId) {
@@ -363,7 +349,6 @@ const App: React.FC = () => {
       setEditingOrder(null);
       setActiveTab('dashboard');
       
-      // Se ficou aguardando produto, avisamos o usuário
       if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
         alert("Ordem criada com status 'Aguardando Produto' por falta de estoque suficiente.");
       }
@@ -375,47 +360,106 @@ const App: React.FC = () => {
     }
   };
 
+  // --- NOVA LÓGICA DE ATUALIZAÇÃO DE STATUS ---
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: Record<string, number> = {}) => {
     try {
       const { data: currentOrder } = await supabase.from('service_orders').select('*').eq('id', id).single();
       if (!currentOrder) return;
 
-      if (newStatus === OrderStatus.COMPLETED) {
-        const items = currentOrder.items as any[];
+      const items = currentOrder.items as any[];
+
+      // 1. INICIAR (EMITTED -> IN_PROGRESS): BAIXA TOTAL E REMOVE RESERVA
+      if (newStatus === OrderStatus.IN_PROGRESS && currentOrder.status === OrderStatus.EMITTED) {
         if (items) {
           for (const item of items) {
-            const leftoverQty = leftovers[item.insumoId] || 0;
-            const consumedQty = Math.max(0, item.qtyTotal - leftoverQty);
-            
-            await supabase.rpc('finalize_stock_usage', {
-              row_id: item.insumoId,
-              qty_to_unreserve: item.qtyTotal,
-              qty_to_deduct: consumedQty
-            });
+             // Remove reserva e desconta do físico
+             await supabase.rpc('finalize_stock_usage', {
+               row_id: item.insumoId,
+               qty_to_unreserve: item.qtyTotal, // Remove toda a reserva
+               qty_to_deduct: item.qtyTotal     // Desconta todo o planejado
+             });
 
-            await supabase.from('stock_history').insert({
-              inventory_id: item.insumoId,
-              type: 'SAIDA',
-              description: `Baixa por Aplicação OS #${currentOrder.order_number}`,
-              quantity: -consumedQty,
-              user_name: session?.user.email?.split('@')[0] || 'Sistema',
-              user_id: session?.user.id
-            });
+             await supabase.from('stock_history').insert({
+               inventory_id: item.insumoId,
+               type: 'SAIDA',
+               description: `Início de Aplicação OS #${currentOrder.order_number}`,
+               quantity: -item.qtyTotal,
+               user_name: session?.user.email?.split('@')[0] || 'Sistema',
+               user_id: session?.user.id
+             });
           }
         }
-      } 
-      else if (newStatus === OrderStatus.CANCELLED) {
-        const items = currentOrder.items as any[];
-        // Só estorna reserva se estava EMITIDA ou EM ANDAMENTO
-        // Se estava AGUARDANDO PRODUTO, não tinha reserva, então não faz nada.
-        if (items && currentOrder.status !== OrderStatus.COMPLETED && currentOrder.status !== OrderStatus.AWAITING_PRODUCT) {
+      }
+      
+      // 2. FINALIZAR (IN_PROGRESS -> COMPLETED): DEVOLVE SOBRAS SE HOUVER
+      else if (newStatus === OrderStatus.COMPLETED && currentOrder.status === OrderStatus.IN_PROGRESS) {
+         if (items) {
            for (const item of items) {
-             await supabase.rpc('adjust_stock_reservation', {
-               row_id: item.insumoId,
-               quantity: -item.qtyTotal 
-             });
+             const leftoverQty = leftovers[item.insumoId] || 0;
+             
+             // Se houver sobra, devolve ao estoque físico
+             if (leftoverQty > 0) {
+               await supabase.rpc('adjust_stock_reservation', {
+                 row_id: item.insumoId,
+                 quantity: 0 // Não mexe na reserva (já foi zerada no inicio)
+               });
+               
+               // Adicionar saldo físico manualmente via update ou criar RPC "add_stock"
+               // Vou usar update simples, assumindo concorrência baixa
+               const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
+               if (invItem) {
+                 await supabase.from('inventory').update({
+                   physical_stock: Number(invItem.physical_stock) + Number(leftoverQty)
+                 }).eq('id', item.insumoId);
+                 
+                 await supabase.from('stock_history').insert({
+                   inventory_id: item.insumoId,
+                   type: 'ENTRADA',
+                   description: `Retorno de Sobra OS #${currentOrder.order_number}`,
+                   quantity: leftoverQty,
+                   user_name: session?.user.email?.split('@')[0] || 'Sistema',
+                   user_id: session?.user.id
+                 });
+               }
+             }
            }
-        }
+         }
+      }
+
+      // 3. CANCELAR (QUALQUER -> CANCELLED)
+      else if (newStatus === OrderStatus.CANCELLED) {
+         if (items) {
+           // Se estava EM ANDAMENTO, já tinha baixado o estoque. Precisa devolver TUDO.
+           if (currentOrder.status === OrderStatus.IN_PROGRESS) {
+             for (const item of items) {
+                const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
+                if (invItem) {
+                  await supabase.from('inventory').update({
+                    physical_stock: Number(invItem.physical_stock) + Number(item.qtyTotal)
+                  }).eq('id', item.insumoId);
+
+                  await supabase.from('stock_history').insert({
+                    inventory_id: item.insumoId,
+                    type: 'ENTRADA',
+                    description: `Estorno OS Cancelada #${currentOrder.order_number}`,
+                    quantity: item.qtyTotal,
+                    user_name: session?.user.email?.split('@')[0] || 'Sistema',
+                    user_id: session?.user.id
+                  });
+                }
+             }
+           } 
+           // Se estava EMITIDA, apenas remove a reserva.
+           else if (currentOrder.status === OrderStatus.EMITTED) {
+             for (const item of items) {
+               await supabase.rpc('adjust_stock_reservation', {
+                 row_id: item.insumoId,
+                 quantity: -item.qtyTotal 
+               });
+             }
+           }
+           // Se estava AGUARDANDO PRODUTO, não faz nada com estoque.
+         }
       }
 
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
@@ -432,9 +476,24 @@ const App: React.FC = () => {
     try {
       const { data: orderToDelete } = await supabase.from('service_orders').select('*').eq('id', id).single();
       
-      if (orderToDelete) {
-         if (orderToDelete.status !== OrderStatus.COMPLETED && orderToDelete.status !== OrderStatus.AWAITING_PRODUCT && orderToDelete.items) {
-            const items = orderToDelete.items as any[];
+      if (orderToDelete && orderToDelete.items) {
+         const items = orderToDelete.items as any[];
+         
+         // Se deletar ordem EM ANDAMENTO -> Devolve Estoque Físico
+         if (orderToDelete.status === OrderStatus.IN_PROGRESS) {
+            for (const item of items) {
+               if (item.insumoId) {
+                  const { data: invItem } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
+                  if (invItem) {
+                    await supabase.from('inventory').update({
+                      physical_stock: Number(invItem.physical_stock) + Number(item.qtyTotal)
+                    }).eq('id', item.insumoId);
+                  }
+               }
+            }
+         }
+         // Se deletar ordem EMITIDA -> Remove Reserva
+         else if (orderToDelete.status === OrderStatus.EMITTED) {
             for (const item of items) {
                if (item.insumoId) {
                  await supabase.rpc('adjust_stock_reservation', {
@@ -544,7 +603,6 @@ const App: React.FC = () => {
           }
           alert("Estoque atualizado com sucesso!");
           
-          // !!! AQUI DISPARA A VERIFICAÇÃO AUTOMÁTICA DE ORDENS PENDENTES !!!
           await triggerAutoRelease();
 
         } else {
@@ -611,7 +669,6 @@ const App: React.FC = () => {
             <Inventory 
               stockProp={inventory} 
               onRefresh={handleRefresh}
-              // Passa a função de verificação automática para o componente de inventário
               onStockChange={triggerAutoRelease}
               masterInsumos={masterInsumos}
               farms={farms} 
