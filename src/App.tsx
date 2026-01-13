@@ -218,7 +218,7 @@ const App: React.FC = () => {
             .select('*')
             .eq('master_insumo_id', masterInsumoId)
             .eq('farm_id', farmId)
-            .maybeSingle(); // Usa maybeSingle para evitar erro se não encontrar
+            .maybeSingle();
 
           let inventoryId = null;
 
@@ -245,12 +245,14 @@ const App: React.FC = () => {
             inventoryId = newInv.id;
           }
 
-          // Registrar no Histórico
+          // Registrar no Histórico com NF
           if (inventoryId) {
+             const nfInfo = extraData.invoice_number ? ` | NF: ${extraData.invoice_number}` : '';
+             
              await supabase.from('stock_history').insert({
                inventory_id: inventoryId,
                type: 'ENTRADA',
-               description: `Recebimento Pedido #${po.order_number}`,
+               description: `Recebimento Pedido #${po.order_number}${nfInfo}`,
                quantity: po.quantity,
                user_name: session.user.email?.split('@')[0],
                user_id: session.user.id
@@ -264,7 +266,7 @@ const App: React.FC = () => {
         }
       }
 
-      // Atualizar status do pedido (Somente se o estoque passou ou se não é recebimento)
+      // Atualizar status do pedido
       const { error } = await supabase
         .from('purchase_orders')
         .update({ status, ...extraData })
