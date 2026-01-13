@@ -40,8 +40,6 @@ const App: React.FC = () => {
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  
-  // Histórico agora vindo do DB
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
 
   // 1. Gerenciar Sessão
@@ -194,30 +192,47 @@ const App: React.FC = () => {
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
     if (!session?.user) return;
     try {
+      // Se o status for RECEBIDO, precisamos dar entrada no estoque
       if (status === PurchaseOrderStatus.RECEIVED) {
-        // ... (Lógica de recebimento existente)
+        // 1. Buscar detalhes do pedido
         const { data: po } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
         if (!po) throw new Error("Pedido não encontrado");
 
         let masterInsumoId = po.master_insumo_id;
         let farmId = po.farm_id;
-        let inventoryId = null;
+
+        // Fallback: buscar IDs pelos nomes se não existirem (para pedidos antigos)
+        if (!masterInsumoId) {
+          const { data: mi } = await supabase.from('master_insumos').select('id').eq('name', po.product_name).single();
+          if (mi) masterInsumoId = mi.id;
+        }
+        if (!farmId) {
+          const { data: fm } = await supabase.from('farms').select('id').eq('name', po.farm_name).single();
+          if (fm) farmId = fm.id;
+        }
 
         if (masterInsumoId && farmId) {
+          // 2. Verificar se já existe no inventário
           const { data: existingInv } = await supabase
             .from('inventory')
             .select('*')
             .eq('master_insumo_id', masterInsumoId)
             .eq('farm_id', farmId)
-            .single();
+            .maybeSingle(); // Usa maybeSingle para evitar erro se não encontrar
+
+          let inventoryId = null;
 
           if (existingInv) {
-            inventoryId = existingInv.id;
-            await supabase.from('inventory').update({
+            // Atualiza quantidade
+            const { error: updateError } = await supabase.from('inventory').update({
               physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
             }).eq('id', existingInv.id);
+            
+            if (updateError) throw updateError;
+            inventoryId = existingInv.id;
           } else {
-            const { data: newInv, error } = await supabase.from('inventory').insert({
+            // Insere novo item no inventário
+            const { data: newInv, error: insertError } = await supabase.from('inventory').insert({
               master_insumo_id: masterInsumoId,
               farm_id: farmId,
               physical_stock: po.quantity,
@@ -225,7 +240,8 @@ const App: React.FC = () => {
               min_stock: 0,
               user_id: session.user.id
             }).select().single();
-            if (error) throw error;
+            
+            if (insertError) throw insertError;
             inventoryId = newInv.id;
           }
 
@@ -240,12 +256,15 @@ const App: React.FC = () => {
                user_id: session.user.id
              });
           }
-
+          
+          alert("Estoque atualizado com sucesso!");
         } else {
           console.warn("Faltam dados para entrada automática.");
+          alert("ERRO: Não foi possível identificar o Insumo ou a Fazenda correspondente no banco de dados. O pedido será marcado como recebido, mas o estoque NÃO foi atualizado.");
         }
       }
 
+      // Atualizar status do pedido (Somente se o estoque passou ou se não é recebimento)
       const { error } = await supabase
         .from('purchase_orders')
         .update({ status, ...extraData })
@@ -255,7 +274,7 @@ const App: React.FC = () => {
       fetchAllData();
     } catch (error) {
       console.error("Erro ao atualizar status:", error);
-      alert("Erro ao atualizar pedido.");
+      alert("Erro ao processar o recebimento. Verifique se o produto e a fazenda estão cadastrados corretamente.");
     }
   };
 
