@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { 
   ChevronLeft, 
@@ -12,7 +11,6 @@ import {
   Search as SearchIcon,
   Filter,
   Droplets,
-  // Added missing Plus icon import
   Plus
 } from 'lucide-react';
 import { ServiceOrder, OrderStatus } from '../types';
@@ -62,9 +60,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({ orders: globalOrders }) => 
 
   const filteredOrders = useMemo(() => {
     return globalOrders.filter(o => 
-      o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.farmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.culture.toLowerCase().includes(searchTerm.toLowerCase())
+      // Filtra ordens concluídas
+      o.status !== OrderStatus.COMPLETED && 
+      (
+        o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        o.farmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        o.culture.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     );
   }, [globalOrders, searchTerm]);
 
@@ -80,7 +82,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ orders: globalOrders }) => 
     switch (status) {
       case OrderStatus.IN_PROGRESS: return 'bg-emerald-500';
       case OrderStatus.AWAITING_PRODUCT: return 'bg-amber-500';
-      case OrderStatus.COMPLETED: return 'bg-blue-500';
+      // Removido COMPLETED pois não será exibido
       case OrderStatus.REWORK: return 'bg-red-500';
       default: return 'bg-slate-400';
     }
@@ -196,9 +198,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({ orders: globalOrders }) => 
           <div className="w-3 h-3 rounded-full bg-amber-500" />
           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Aguardando Prod.</span>
         </div>
+        {/* Removido legenda de Concluída pois não aparece mais */}
         <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-blue-500" />
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Concluída</span>
+          <div className="w-3 h-3 rounded-full bg-slate-400" />
+          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest italic">Agendado</span>
         </div>
         <div className="flex items-center gap-3">
           <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -208,11 +211,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ orders: globalOrders }) => 
         <div className="ml-auto flex items-center gap-6">
            <div className="flex items-center gap-3 text-emerald-600">
               <Hash size={16} />
-              <span className="text-xs font-black uppercase tracking-widest italic">{globalOrders.length} Ordens Totais</span>
+              <span className="text-xs font-black uppercase tracking-widest italic">{filteredOrders.length} Ordens Ativas</span>
            </div>
            <div className="flex items-center gap-3 text-blue-600">
               <Layers size={16} />
-              <span className="text-xs font-black uppercase tracking-widest italic">{globalOrders.reduce((acc, o) => acc + o.totalArea, 0).toLocaleString()} ha Planejados</span>
+              <span className="text-xs font-black uppercase tracking-widest italic">{filteredOrders.reduce((acc, o) => acc + o.totalArea, 0).toLocaleString()} ha Planejados</span>
            </div>
         </div>
       </div>
