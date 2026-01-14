@@ -71,7 +71,7 @@ const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
   };
 
   return (
-    <span className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest ${styles[status] || styles[OrderStatus.DRAFT]}`}>
+    <span className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${styles[status] || styles[OrderStatus.DRAFT]}`}>
       {icons[status] || icons[OrderStatus.DRAFT]}
       {labels[status] || status}
     </span>
@@ -225,18 +225,18 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
 
         {/* Main Table Container */}
         <div className="bg-white border border-slate-200 rounded-[3rem] overflow-hidden shadow-xl min-h-[500px]">
-          <div className="overflow-x-visible custom-scrollbar">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[1000px]">
               <thead>
                 <tr className="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-black tracking-[0.2em] border-b border-slate-100">
-                  <th className="px-10 py-8">Fazenda / Talhão</th>
-                  <th className="px-10 py-8"># / Área</th>
-                  <th className="px-10 py-8">Cultura</th>
-                  <th className="px-10 py-8">Volume Calda</th>
-                  <th className="px-10 py-8">Custo Material</th>
-                  <th className="px-10 py-8">Status Atual</th>
-                  <th className="px-10 py-8">Limite Aplicação</th>
-                  <th className="px-10 py-8 text-right">Ações</th>
+                  <th className="px-6 py-8">Fazenda / Talhão</th>
+                  <th className="px-6 py-8"># / Área</th>
+                  <th className="px-6 py-8">Cultura</th>
+                  <th className="px-6 py-8">Volume Calda</th>
+                  <th className="px-6 py-8">Custo Material</th>
+                  <th className="px-6 py-8">Status Atual</th>
+                  <th className="px-6 py-8">Limite Aplicação</th>
+                  <th className="px-6 py-8 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -246,55 +246,55 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                     
                     return (
                       <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
                               <MapPin size={12} className="text-slate-300" />
-                              <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{order.farmName}</span>
+                              <span className="text-sm font-black text-slate-900 uppercase tracking-tight whitespace-nowrap">{order.farmName}</span>
                             </div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 truncate max-w-[200px]">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 truncate max-w-[180px]">
                               {order.fieldNames.join(', ')}
                             </span>
                           </div>
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <div className="flex flex-col">
                             <span className="text-xs font-black text-slate-400 uppercase mb-1">#{order.orderNumber}</span>
                             <div className="flex items-center gap-2">
                                 <Hash size={14} className="text-slate-300" />
-                                <span className="text-base font-black text-slate-900 tracking-tighter">{order.totalArea.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
+                                <span className="text-base font-black text-slate-900 tracking-tighter whitespace-nowrap">{order.totalArea.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
                             </div>
                           </div>
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <div className="flex flex-col">
-                            <span className="text-xs font-black text-blue-600 tracking-tight italic">
+                            <span className="text-xs font-black text-blue-600 tracking-tight italic whitespace-nowrap">
                               {order.totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} L
                             </span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
                               {order.flowRate} L/HA
                             </span>
                           </div>
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <div className="flex items-center gap-1 text-emerald-600">
                             <span className="text-[10px] font-black uppercase">R$</span>
-                            <span className="text-sm font-black tracking-tight">{totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-sm font-black tracking-tight whitespace-nowrap">{totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <StatusBadge status={order.status} />
                         </td>
-                        <td className="px-10 py-8">
+                        <td className="px-6 py-8">
                           <div className="flex items-center gap-3">
                             <Calendar size={16} className="text-slate-300" />
-                            <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
+                            <span className="text-xs font-black text-slate-700 tracking-widest whitespace-nowrap">{order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
                           </div>
                         </td>
-                        <td className="px-10 py-8 text-right relative">
+                        <td className="px-6 py-8 text-right relative">
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleMenuClick(order.id); }}
                             className={`p-3 rounded-2xl transition-all active:scale-95 ${activeMenuId === order.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-300 hover:text-slate-900 hover:bg-slate-100'}`}
