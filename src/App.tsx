@@ -38,11 +38,14 @@ const App: React.FC = () => {
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
-  const [farms, setFarms] = useState<{ id: string, name: string }[]>([]); 
-  const [fields, setFields] = useState<Field[]>([]);
+  
+  // Alterado para 'any' temporariamente para acomodar campos extras como location/total_area sem quebrar tipagem estrita neste momento
+  const [farms, setFarms] = useState<any[]>([]); 
+  const [fields, setFields] = useState<any[]>([]);
+  const [crops, setCrops] = useState<any[]>([]); 
+
   const [machines, setMachines] = useState<Machine[]>([]);
   const [operators, setOperators] = useState<{id: string, name: string}[]>([]);
-  const [crops, setCrops] = useState<{id: string, name: string, variety: string}[]>([]); // Novo estado para Culturas
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
@@ -79,27 +82,29 @@ const App: React.FC = () => {
         })));
       }
 
+      // Buscando Culturas
       const { data: cropsData } = await supabase.from('crops').select('*').order('name');
       if (cropsData) {
-        setCrops(cropsData.map(c => ({
-          id: c.id,
-          name: c.name,
-          variety: c.variety
+        setCrops(cropsData);
+      }
+
+      // Buscando Fazendas (Todos os campos)
+      const { data: farmsData } = await supabase.from('farms').select('*').order('name');
+      if (farmsData) {
+        // Mapeando para o formato esperado pelo AreasFields (area = total_area)
+        setFarms(farmsData.map(f => ({
+          ...f,
+          area: f.total_area
         })));
       }
 
-      const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
-      if (farmsData) {
-        setFarms(farmsData);
-      }
-
-      const { data: fieldsData } = await supabase.from('fields').select('*');
+      // Buscando Talhões
+      const { data: fieldsData } = await supabase.from('fields').select(`*, farm:farms(name)`);
       if (fieldsData) {
-        setFields(fieldsData.map(f => ({
-          id: f.id,
+        setFields(fieldsData.map((f: any) => ({
+          ...f,
           farmId: f.farm_id,
-          name: f.name,
-          area: f.area
+          farmName: f.farm?.name
         })));
       }
 
@@ -679,12 +684,21 @@ const App: React.FC = () => {
               machines={machines}
               operators={operators}
               insumos={inventory}
-              crops={crops} // Passando culturas para o formulário
+              crops={crops} 
             />
           </div>
         );
       case 'fleet': return <div className="p-12 h-full"><FleetManagement /></div>;
-      case 'areas': return <div className="p-12 h-full"><AreasFields /></div>;
+      case 'areas': return (
+        <div className="p-12 h-full">
+          <AreasFields 
+            farms={farms}
+            fields={fields}
+            crops={crops}
+            onUpdate={fetchAllData}
+          />
+        </div>
+      );
       case 'reports': return (
         <div className="p-12 h-full">
           <Reports 

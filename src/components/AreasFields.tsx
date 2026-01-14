@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Sprout, 
   Map as MapIcon, 
@@ -94,11 +94,14 @@ const AreaSection: React.FC<AreaSectionProps> = ({
   );
 };
 
-const AreasFields: React.FC = () => {
-  const [crops, setCrops] = useState<any[]>([]);
-  const [farms, setFarms] = useState<any[]>([]);
-  const [fields, setFields] = useState<any[]>([]);
+interface AreasFieldsProps {
+  farms: any[];
+  fields: any[];
+  crops: any[];
+  onUpdate: () => void;
+}
 
+const AreasFields: React.FC<AreasFieldsProps> = ({ farms, fields, crops, onUpdate }) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [modalType, setModalType] = useState<'crop' | 'farm' | 'field' | null>(null);
@@ -106,59 +109,6 @@ const AreasFields: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
   const [loading, setLoading] = useState(false);
-
-  // Carregar dados ao montar o componente
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // Buscar Culturas
-      const { data: cropsData } = await supabase
-        .from('crops')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (cropsData) setCrops(cropsData);
-
-      // Buscar Fazendas
-      const { data: farmsData } = await supabase
-        .from('farms')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (farmsData) {
-        const mappedFarms = farmsData.map(f => ({
-          ...f,
-          area: f.total_area // Mapeando total_area do banco para area no front
-        }));
-        setFarms(mappedFarms);
-      }
-
-      // Buscar Talhões
-      const { data: fieldsData } = await supabase
-        .from('fields')
-        .select(`
-          *,
-          farm:farms(name)
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (fieldsData) {
-        const mappedFields = fieldsData.map((f: any) => ({
-          ...f,
-          farmName: f.farm?.name
-        }));
-        setFields(mappedFields);
-      }
-
-    } catch (error) {
-      console.error('Erro ao buscar dados:', error);
-    }
-  };
 
   const handleOpenModal = (type: 'crop' | 'farm' | 'field', item: any = null) => {
     setModalType(type);
@@ -199,7 +149,7 @@ const AreasFields: React.FC = () => {
         const payload = {
           name: formData.name,
           location: formData.location,
-          total_area: formData.area, // Mapeando para o nome correto da coluna no DB
+          total_area: formData.area, 
           user_id: userId
         };
 
@@ -224,7 +174,7 @@ const AreasFields: React.FC = () => {
         }
       }
 
-      await fetchData(); // Recarregar dados
+      onUpdate(); // Atualizar dados via prop do pai
       setModalOpen(false);
       setFormData({});
       setEditingItem(null);
@@ -249,7 +199,7 @@ const AreasFields: React.FC = () => {
         await supabase.from('fields').delete().eq('id', itemToDelete.id);
       }
 
-      await fetchData();
+      onUpdate();
       setConfirmDeleteOpen(false);
       setItemToDelete(null);
     } catch (error) {
