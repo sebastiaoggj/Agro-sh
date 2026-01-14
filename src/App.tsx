@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, ClipboardList, Package, Truck, 
   Map as MapIcon, Calendar, Sprout, ShoppingCart, 
-  Beaker, LogOut, RefreshCw, BarChart3, Users, LogIn
+  Beaker, LogOut, RefreshCw, BarChart3, Users
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './integrations/supabase/client';
@@ -95,7 +95,7 @@ const App: React.FC = () => {
   };
 
   const fetchAllData = async () => {
-    // Removida a verificação estrita (!session) para permitir carregamento em modo público/demo se as policies permitirem
+    if (!session) return;
     try {
       const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
@@ -212,21 +212,18 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Carrega dados independente da sessão, para permitir visualização se o banco for público
-    fetchAllData();
+    if (session) fetchAllData();
   }, [session]);
 
   const triggerAutoRelease = async () => { /* Lógica existente */ };
 
   const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
-    // Fallback para usuário demo se não houver sessão
-    const userId = session?.user.id || 'demo-user-id'; 
+    if (!session) return false;
+    const userId = session.user.id;
     try {
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
-      // ... (Rest of logic remains mostly same, just checking user presence)
       let finalStatus = order.status;
       if (!order.id || order.status === OrderStatus.EMITTED || order.status === OrderStatus.DRAFT || order.status === OrderStatus.AWAITING_PRODUCT) {
-         // Simplificação da checagem de estoque para demo
          finalStatus = OrderStatus.EMITTED;
       }
 
@@ -258,7 +255,7 @@ const App: React.FC = () => {
         total_volume: order.totalVolume,
         status: finalStatus,
         items: validItems, 
-        user_id: userId // Usando ID real ou demo
+        user_id: userId
       };
 
       if (editingOrder && editingOrder.id === order.id) {
@@ -275,14 +272,13 @@ const App: React.FC = () => {
 
     } catch (error: any) {
       console.error("Erro ao salvar OS:", error);
-      alert(`Erro ao salvar (Modo Demo pode ter restrições de banco): ${error.message}`);
+      alert(`Erro ao salvar: ${error.message}`);
       return false;
     }
   };
 
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: any = {}) => {
     try {
-      // Simplificado para permitir demo
       const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
       if (error) throw error;
       setTimeout(() => { fetchAllData(); }, 500);
@@ -304,9 +300,9 @@ const App: React.FC = () => {
   };
 
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
-    const userId = session?.user.id || 'demo-user-id';
+    if (!session) return;
+    const userId = session.user.id;
     try {
-      // ... payload logic ...
       const payload = {
         order_number: po.orderNumber,
         supplier: po.supplier,
@@ -331,7 +327,6 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
-    // ... simplificado ...
     try {
        const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
        if (error) throw error;
@@ -340,7 +335,6 @@ const App: React.FC = () => {
   };
 
   const handleDeletePO = async (id: string) => {
-    // ... simplificado ...
     if(!confirm("Excluir?")) return;
     try {
         await supabase.from('purchase_orders').delete().eq('id', id);
@@ -350,28 +344,20 @@ const App: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    // Força recarregamento para limpar estados se necessário
     window.location.reload();
   };
 
   const handleRefresh = () => { fetchAllData(); };
 
-  // Se não houver sessão, criamos um perfil "Virtual" com todas as permissões para modo demo/visualização
-  const effectiveProfile = session ? userProfile : {
-    id: 'demo',
-    role: 'admin' as const,
-    can_manage_users: true,
-    can_manage_inputs: true,
-    can_manage_machines: true,
-    full_name: 'Modo Demonstração'
-  };
+  // Usar o perfil carregado do banco de dados (sem fallback demo)
+  const effectiveProfile = userProfile;
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-100"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
-
-  // REMOVIDO: Bloco que retornava <Login /> se !session
+  
+  // BLOQUEIO DE LOGIN ATIVO
+  if (!session) return <Login />;
 
   const renderContent = () => {
-    // TRAVAS VISUAIS (Baseadas no effectiveProfile)
     switch (activeTab) {
       case 'dashboard': 
         return <OSKanban orders={orders} onUpdateStatus={handleUpdateOSStatus} onDeleteOrder={handleDeleteOS} onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }} onMakePurchaseClick={() => setActiveTab('purchases')} />;
@@ -403,9 +389,6 @@ const App: React.FC = () => {
         return effectiveProfile?.can_manage_users ? (
           <div className="p-12 h-full"><TeamManagement /></div>
         ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
-        
-      case 'login': // Nova rota manual para quem quiser logar
-        return <Login />;
 
       default: return null;
     }
@@ -435,7 +418,7 @@ const App: React.FC = () => {
             <div className="flex flex-col">
               <span className="font-black text-xl text-slate-900 leading-none italic uppercase">Agro SH</span>
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                Olá, {effectiveProfile?.full_name?.split(' ')[0] || 'Visitante'}
+                Olá, {effectiveProfile?.full_name?.split(' ')[0] || 'Usuário'}
               </span>
             </div>
           )}
@@ -459,18 +442,10 @@ const App: React.FC = () => {
              <RefreshCw size={20} />
              {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Atualizar</span>}
            </button>
-           
-           {session ? (
-             <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
-               <LogOut size={20} />
-               {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Sair</span>}
-             </button>
-           ) : (
-             <button onClick={() => setActiveTab('login')} className="w-full flex items-center gap-4 px-4 py-3 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-2xl transition-all">
-               <LogIn size={20} />
-               {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Entrar / Login</span>}
-             </button>
-           )}
+           <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+             <LogOut size={20} />
+             {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Sair</span>}
+           </button>
         </div>
       </aside>
       
