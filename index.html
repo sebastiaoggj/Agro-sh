@@ -30,13 +30,41 @@
       }
       
       @media print {
-        body {
-          overflow: visible !important;
-          height: auto !important;
+        @page {
+          margin: 10mm;
+          size: auto;
         }
-        #root {
+
+        html, body {
+          visibility: hidden;
           height: auto !important;
           overflow: visible !important;
+          background: white !important;
+        }
+
+        #root {
+          visibility: visible;
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        /* Esconde barras de rolagem na impressão */
+        ::-webkit-scrollbar {
+          display: none;
+        }
+        
+        /* Garante que o conteúdo de impressão esteja visível e no topo */
+        .print\:block {
+          visibility: visible;
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+        }
+
+        /* Oculta tudo que não for de impressão */
+        .print\:hidden {
+          display: none !important;
         }
       }
       

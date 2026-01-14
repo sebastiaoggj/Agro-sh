@@ -22,11 +22,11 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
   const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCapacity) : 0;
   
   return (
-    <div className="hidden print:block w-full min-h-screen bg-white text-slate-900 p-8">
+    <div className="hidden print:block w-full h-auto bg-white text-slate-900 p-8 print:p-0">
       {/* Header */}
       <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4 break-inside-avoid">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-600 rounded-lg flex items-center justify-center text-white print:bg-emerald-600 print:text-white">
+          <div className="w-12 h-12 bg-emerald-600 rounded-lg flex items-center justify-center text-white print:bg-emerald-600 print:text-white print-color-adjust-exact">
             <Sprout size={32} />
           </div>
           <div>
@@ -41,7 +41,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       </div>
 
       {/* Farm Box */}
-      <div className="border-2 border-slate-800 rounded-xl p-4 mb-4 flex justify-between items-center bg-slate-50 print:bg-slate-50 break-inside-avoid">
+      <div className="border-2 border-slate-800 rounded-xl p-4 mb-6 flex justify-between items-center bg-slate-50 print:bg-slate-50 print-color-adjust-exact break-inside-avoid">
         <div className="flex items-center gap-4">
           <MapPin size={32} className="text-emerald-600" />
           <div>
@@ -56,10 +56,10 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       </div>
 
       {/* Details Grid */}
-      <div className="border border-slate-300 rounded-xl p-0 mb-4 overflow-hidden break-inside-avoid">
+      <div className="border border-slate-300 rounded-xl p-0 mb-6 break-inside-avoid">
         <div className="grid grid-cols-2">
           {/* Coluna Esquerda */}
-          <div className="p-4 border-r border-slate-300 space-y-3">
+          <div className="p-4 border-r border-slate-300 space-y-4">
             <div className="flex items-start gap-3">
               <MapPin size={16} className="text-slate-400 mt-0.5" />
               <div>
@@ -91,7 +91,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           </div>
 
           {/* Coluna Direita */}
-          <div className="p-4 space-y-3">
+          <div className="p-4 space-y-4">
             <div className="flex items-start gap-3">
               <Tractor size={16} className="text-slate-400 mt-0.5" />
               <div>
@@ -157,13 +157,13 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       </div>
 
       {/* Dosage Table - Full Tank */}
-      <div className="mb-6 border border-slate-800 rounded-xl overflow-hidden break-inside-avoid">
-        <div className="bg-emerald-100 p-2 border-b border-emerald-200 flex items-center justify-between px-4">
+      <div className="mb-6 border border-slate-800 rounded-xl overflow-hidden break-inside-avoid-page">
+        <div className="bg-emerald-100 p-2 border-b border-emerald-200 flex items-center justify-between px-4 print-color-adjust-exact">
            <span className="text-xs font-black uppercase tracking-widest text-emerald-800">Receituário: Tanque Cheio ({order.tankCapacity} L)</span>
         </div>
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-black tracking-widest text-slate-500">
+            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-black tracking-widest text-slate-500 print-color-adjust-exact">
               <th className="px-4 py-2">Produto</th>
               <th className="px-4 py-2 text-center">Dose / ha</th>
               <th className="px-4 py-2 text-right">Qtd. no Tanque</th>
@@ -185,8 +185,8 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
 
       {/* Partial Tank Table - If Exists */}
       {hasPartialTank && (
-        <div className="mb-6 border border-amber-300 rounded-xl overflow-hidden break-inside-avoid">
-          <div className="bg-amber-100 p-2 border-b border-amber-200 flex items-center justify-between px-4">
+        <div className="mb-6 border border-amber-300 rounded-xl overflow-hidden break-inside-avoid-page">
+          <div className="bg-amber-100 p-2 border-b border-amber-200 flex items-center justify-between px-4 print-color-adjust-exact">
              <div className="flex items-center gap-2">
                <AlertCircle size={16} className="text-amber-600" />
                <span className="text-xs font-black uppercase tracking-widest text-amber-800">Instrução para Último Tanque (Parcial)</span>
@@ -195,7 +195,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           </div>
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-amber-50/50 border-b border-amber-100 text-[10px] uppercase font-black tracking-widest text-amber-700">
+              <tr className="bg-amber-50/50 border-b border-amber-100 text-[10px] uppercase font-black tracking-widest text-amber-700 print-color-adjust-exact">
                 <th className="px-4 py-2">Produto</th>
                 <th className="px-4 py-2 text-right">Quantidade para Mistura</th>
               </tr>
@@ -216,7 +216,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       )}
 
       {/* Warnings */}
-      <div className="border border-red-200 bg-red-50 rounded-xl p-4 mb-4 break-inside-avoid">
+      <div className="border border-red-200 bg-red-50 rounded-xl p-4 mb-4 break-inside-avoid print-color-adjust-exact">
         <div className="flex items-center gap-2 mb-2 text-red-600">
           <AlertTriangle size={18} strokeWidth={2.5} />
           <h4 className="text-sm font-black uppercase tracking-widest">Atenção Obrigatória</h4>
@@ -227,7 +227,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       </div>
 
       {/* Observations */}
-      <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 min-h-[100px] break-inside-avoid">
+      <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 min-h-[100px] break-inside-avoid print-color-adjust-exact">
         <div className="flex items-center gap-2 mb-2 text-amber-600">
           <Info size={18} strokeWidth={2.5} />
           <h4 className="text-sm font-black uppercase tracking-widest">Observações Importantes</h4>
