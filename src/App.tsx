@@ -689,6 +689,7 @@ const App: React.FC = () => {
         <div className="p-12 h-full">
           <Reports 
             orders={orders} 
+            inventory={inventory}
             onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }}
             onDelete={handleDeleteOS}
           />

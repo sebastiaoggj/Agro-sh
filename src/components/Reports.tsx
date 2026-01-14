@@ -17,13 +17,15 @@ import {
   Printer,
   Edit,
   Trash2,
-  X
+  X,
+  DollarSign
 } from 'lucide-react';
-import { OrderStatus, ServiceOrder } from '../types';
+import { OrderStatus, ServiceOrder, Insumo } from '../types';
 import OSPrintLayout from './OSPrintLayout';
 
 interface ReportsProps {
   orders: ServiceOrder[];
+  inventory: Insumo[];
   onEdit: (order: ServiceOrder) => void;
   onDelete: (id: string) => void;
 }
@@ -91,7 +93,7 @@ const MetricCard: React.FC<{ title: string, value: string, unit: string, icon: a
   </div>
 );
 
-const Reports: React.FC<ReportsProps> = ({ orders, onEdit, onDelete }) => {
+const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<ServiceOrder | null>(null);
@@ -110,6 +112,18 @@ const Reports: React.FC<ReportsProps> = ({ orders, onEdit, onDelete }) => {
       o.culture.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [orders, searchTerm]);
+
+  // Helper para calcular custo total da OS
+  const calculateTotalCost = (order: ServiceOrder) => {
+    if (!order.items || order.items.length === 0) return 0;
+    
+    return order.items.reduce((total, item) => {
+      // Encontra o item no inventário para pegar o preço atual
+      const stockItem = inventory.find(inv => inv.id === item.insumoId);
+      const price = stockItem?.price || 0;
+      return total + (item.qtyTotal * price);
+    }, 0);
+  };
 
   const handlePrint = (order: ServiceOrder) => {
     setOrderToPrint(order);
@@ -219,6 +233,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, onEdit, onDelete }) => {
                   <th className="px-10 py-8"># / Área</th>
                   <th className="px-10 py-8">Cultura</th>
                   <th className="px-10 py-8">Volume Calda</th>
+                  <th className="px-10 py-8">Custo Material</th>
                   <th className="px-10 py-8">Status Atual</th>
                   <th className="px-10 py-8">Limite Aplicação</th>
                   <th className="px-10 py-8 text-right">Ações</th>
@@ -226,90 +241,100 @@ const Reports: React.FC<ReportsProps> = ({ orders, onEdit, onDelete }) => {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filteredOrders.length > 0 ? (
-                  filteredOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
-                      <td className="px-10 py-8">
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <MapPin size={12} className="text-slate-300" />
-                            <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{order.farmName}</span>
+                  filteredOrders.map((order) => {
+                    const totalCost = calculateTotalCost(order);
+                    
+                    return (
+                      <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
+                        <td className="px-10 py-8">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <MapPin size={12} className="text-slate-300" />
+                              <span className="text-sm font-black text-slate-900 uppercase tracking-tight">{order.farmName}</span>
+                            </div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 truncate max-w-[200px]">
+                              {order.fieldNames.join(', ')}
+                            </span>
                           </div>
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-5 truncate max-w-[200px]">
-                            {order.fieldNames.join(', ')}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-slate-400 uppercase mb-1">#{order.orderNumber}</span>
-                          <div className="flex items-center gap-2">
-                              <Hash size={14} className="text-slate-300" />
-                              <span className="text-base font-black text-slate-900 tracking-tighter">{order.totalArea.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
+                        </td>
+                        <td className="px-10 py-8">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-slate-400 uppercase mb-1">#{order.orderNumber}</span>
+                            <div className="flex items-center gap-2">
+                                <Hash size={14} className="text-slate-300" />
+                                <span className="text-base font-black text-slate-900 tracking-tighter">{order.totalArea.toLocaleString('pt-BR')} <span className="text-[10px] text-slate-400 not-italic uppercase ml-0.5">HA</span></span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8">
-                        <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
-                      </td>
-                      <td className="px-10 py-8">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-blue-600 tracking-tight italic">
-                            {order.totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} L
-                          </span>
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                            {order.flowRate} L/HA
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8">
-                        <StatusBadge status={order.status} />
-                      </td>
-                      <td className="px-10 py-8">
-                        <div className="flex items-center gap-3">
-                          <Calendar size={16} className="text-slate-300" />
-                          <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8 text-right relative">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleMenuClick(order.id); }}
-                          className={`p-3 rounded-2xl transition-all active:scale-95 ${activeMenuId === order.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-300 hover:text-slate-900 hover:bg-slate-100'}`}
-                        >
-                          {activeMenuId === order.id ? <X size={20} /> : <MoreHorizontal size={20} />}
-                        </button>
+                        </td>
+                        <td className="px-10 py-8">
+                          <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
+                        </td>
+                        <td className="px-10 py-8">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-black text-blue-600 tracking-tight italic">
+                              {order.totalVolume.toLocaleString('pt-BR', { minimumFractionDigits: 0 })} L
+                            </span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                              {order.flowRate} L/HA
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-10 py-8">
+                          <div className="flex items-center gap-1 text-emerald-600">
+                            <span className="text-[10px] font-black uppercase">R$</span>
+                            <span className="text-sm font-black tracking-tight">{totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        </td>
+                        <td className="px-10 py-8">
+                          <StatusBadge status={order.status} />
+                        </td>
+                        <td className="px-10 py-8">
+                          <div className="flex items-center gap-3">
+                            <Calendar size={16} className="text-slate-300" />
+                            <span className="text-xs font-black text-slate-700 tracking-widest">{order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
+                          </div>
+                        </td>
+                        <td className="px-10 py-8 text-right relative">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleMenuClick(order.id); }}
+                            className={`p-3 rounded-2xl transition-all active:scale-95 ${activeMenuId === order.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-300 hover:text-slate-900 hover:bg-slate-100'}`}
+                          >
+                            {activeMenuId === order.id ? <X size={20} /> : <MoreHorizontal size={20} />}
+                          </button>
 
-                        {/* Dropdown Menu */}
-                        {activeMenuId === order.id && (
-                          <div className="absolute right-12 top-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl w-56 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                             <div className="p-1.5 space-y-0.5">
-                               <button 
-                                onClick={() => handlePrint(order)}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
-                               >
-                                 <Printer size={16} /> Imprimir OS
-                               </button>
-                               <button 
-                                onClick={() => { onEdit(order); setActiveMenuId(null); }}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
-                               >
-                                 <Edit size={16} /> Editar Dados
-                               </button>
-                               <div className="h-px bg-slate-100 mx-2 my-1" />
-                               <button 
-                                onClick={() => { if(confirm('Excluir esta ordem?')) onDelete(order.id); }}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
-                               >
-                                 <Trash2 size={16} /> Excluir Registro
-                               </button>
-                             </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                          {/* Dropdown Menu */}
+                          {activeMenuId === order.id && (
+                            <div className="absolute right-12 top-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl w-56 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                              <div className="p-1.5 space-y-0.5">
+                                <button 
+                                  onClick={() => handlePrint(order)}
+                                  className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                                >
+                                  <Printer size={16} /> Imprimir OS
+                                </button>
+                                <button 
+                                  onClick={() => { onEdit(order); setActiveMenuId(null); }}
+                                  className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                                >
+                                  <Edit size={16} /> Editar Dados
+                                </button>
+                                <div className="h-px bg-slate-100 mx-2 my-1" />
+                                <button 
+                                  onClick={() => { if(confirm('Excluir esta ordem?')) onDelete(order.id); }}
+                                  className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
+                                >
+                                  <Trash2 size={16} /> Excluir Registro
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
+                    <td colSpan={8} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
                       Nenhuma ordem encontrada
                     </td>
                   </tr>
