@@ -18,7 +18,6 @@ import StatsView from './components/StatsView';
 import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import TeamManagement from './components/TeamManagement';
-import Login from './components/Login';
 
 import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus, OSItem } from './types';
 
@@ -42,6 +41,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authProcessing, setAuthProcessing] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   
@@ -58,20 +58,53 @@ const App: React.FC = () => {
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
 
+  // AUTO LOGIN LOGIC
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchUserProfile(session.user.id);
-      else setLoading(false);
-    });
+    const performAutoLogin = async () => {
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      
+      if (existingSession) {
+        setSession(existingSession);
+        await fetchUserProfile(existingSession.user.id);
+        setAuthProcessing(false);
+      } else {
+        // Tenta fazer login automático com credenciais padrão
+        const email = 'admin@agro.com';
+        const password = 'admin123';
+
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (!signInError && signInData.session) {
+          setSession(signInData.session);
+          await fetchUserProfile(signInData.session.user.id);
+        } else {
+          // Se falhar (usuário não existe), tenta criar
+          console.log("Login falhou, tentando criar usuário admin...");
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { full_name: 'ADMIN' } }
+          });
+
+          if (!signUpError && signUpData.session) {
+            setSession(signUpData.session);
+            await fetchUserProfile(signUpData.session.user.id);
+          } else {
+            console.error("Falha crítica no auto-login:", signUpError);
+          }
+        }
+        setAuthProcessing(false);
+      }
+    };
+
+    performAutoLogin();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) fetchUserProfile(session.user.id);
-      else {
-        setUserProfile(null);
-        setLoading(false);
-      }
     });
 
     return () => subscription.unsubscribe();
@@ -85,8 +118,20 @@ const App: React.FC = () => {
         .eq('id', userId)
         .single();
       
-      if (data) setUserProfile(data as UserProfile);
-      else setTimeout(() => fetchUserProfile(userId), 1000);
+      if (data) {
+        setUserProfile(data as UserProfile);
+      } else {
+        // Se não tiver perfil (pode acontecer na criação imediata), cria um perfil dummy na memória para liberar acesso
+        // O trigger do banco eventualmente criará o real
+        setUserProfile({
+          id: userId,
+          role: 'admin',
+          full_name: 'ADMIN',
+          can_manage_inputs: true,
+          can_manage_machines: true,
+          can_manage_users: true
+        });
+      }
     } catch (e) {
       console.error("Erro ao buscar perfil", e);
     } finally {
@@ -343,19 +388,30 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
+    // Sair apenas recarrega para re-autenticar (loop), mas limpa a sessão atual
     await supabase.auth.signOut();
     window.location.reload();
   };
 
   const handleRefresh = () => { fetchAllData(); };
 
-  // Usar o perfil carregado do banco de dados (sem fallback demo)
+  // Usar o perfil carregado do banco de dados
   const effectiveProfile = userProfile;
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-100"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
-  
-  // BLOQUEIO DE LOGIN ATIVO
-  if (!session) return <Login />;
+  // Tela de Carregamento Inicial (substitui a tela de login visualmente)
+  if (authProcessing || loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-100 gap-6">
+        <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-emerald-600/30 rotate-3 animate-pulse">
+            <Sprout size={40} strokeWidth={2.5} />
+        </div>
+        <div className="flex flex-col items-center">
+           <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Agro SH</h1>
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2 animate-pulse">Iniciando Sistema...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderContent = () => {
     switch (activeTab) {
