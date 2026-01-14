@@ -411,8 +411,8 @@ const App: React.FC = () => {
             <Sprout size={40} strokeWidth={2.5} />
         </div>
         <div className="flex flex-col items-center">
-           <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Agro SH</h1>
-           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2 animate-pulse">Iniciando Sistema...</p>
+           <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
+           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2 animate-pulse">Sistema de Gestão</p>
         </div>
       </div>
     );
@@ -477,8 +477,9 @@ const App: React.FC = () => {
           <SHLogo isSidebarOpen={isSidebarOpen} />
           {isSidebarOpen && (
             <div className="flex flex-col">
-              <span className="font-black text-xl text-slate-900 leading-none italic uppercase">Agro SH</span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+              <span className="font-black text-lg text-slate-900 leading-none italic uppercase">SH Oliveira</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
+              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">
                 Olá, {effectiveProfile?.full_name?.split(' ')[0] || 'Usuário'}
               </span>
             </div>

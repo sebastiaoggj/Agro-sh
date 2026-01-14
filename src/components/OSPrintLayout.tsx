@@ -30,8 +30,8 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             <Sprout size={32} />
           </div>
           <div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter italic">Agro SH</h1>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.3em]">Gestão de Aplicações Agrícolas</p>
+            <h1 className="text-2xl font-black uppercase tracking-tighter italic">SH Oliveira</h1>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-[0.3em]">Sistema de Gestão</p>
           </div>
         </div>
         <div className="text-right">
