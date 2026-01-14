@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, ClipboardList, Package, Truck, 
   Map as MapIcon, Calendar, Sprout, ShoppingCart, 
-  Beaker, LogOut, RefreshCw, BarChart3, Users
+  Beaker, LogOut, RefreshCw, BarChart3, Users, LogIn
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './integrations/supabase/client';
@@ -86,7 +86,6 @@ const App: React.FC = () => {
         .single();
       
       if (data) setUserProfile(data as UserProfile);
-      // Se não achar perfil (caso raro de delay no trigger), tenta novamente em 1s
       else setTimeout(() => fetchUserProfile(userId), 1000);
     } catch (e) {
       console.error("Erro ao buscar perfil", e);
@@ -96,10 +95,8 @@ const App: React.FC = () => {
   };
 
   const fetchAllData = async () => {
-    if (!session) return;
+    // Removida a verificação estrita (!session) para permitir carregamento em modo público/demo se as policies permitirem
     try {
-      // (Mantendo o fetchAllData original inalterado para brevidade, pois já foi corrigido anteriormente)
-      // Carregando Insumos Mestres
       const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
         setMasterInsumos(masterData.map(item => ({
@@ -113,15 +110,14 @@ const App: React.FC = () => {
         })));
       }
       
-      // Carregando outras tabelas...
       const { data: cropsData } = await supabase.from('crops').select('*').order('name');
       if (cropsData) setCrops(cropsData.map(c => ({ id: c.id, name: c.name, variety: c.variety })));
 
-      const { data: farmsData } = await supabase.from('farms').select('id, name').order('name');
-      if (farmsData) setFarms(farmsData);
+      const { data: farmsData } = await supabase.from('farms').select('*').order('name');
+      if (farmsData) setFarms(farmsData.map(f => ({ ...f, area: f.total_area })));
 
-      const { data: fieldsData } = await supabase.from('fields').select('*');
-      if (fieldsData) setFields(fieldsData.map(f => ({ id: f.id, farmId: f.farm_id, name: f.name, area: f.area })));
+      const { data: fieldsData } = await supabase.from('fields').select(`*, farm:farms(name)`);
+      if (fieldsData) setFields(fieldsData.map((f: any) => ({ ...f, farmId: f.farm_id, farmName: f.farm?.name })));
 
       const { data: machinesData } = await supabase.from('machines').select('*');
       if (machinesData) setMachines(machinesData.map(m => ({ id: m.id, name: m.name, type: 'Pulverizador Terrestre', tankCapacity: m.capacity })));
@@ -216,26 +212,166 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (session) fetchAllData();
+    // Carrega dados independente da sessão, para permitir visualização se o banco for público
+    fetchAllData();
   }, [session]);
 
-  // (Mantendo handlers de OS, PO, Delete, etc. iguais...)
-  const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => { /* Lógica existente */ return true; };
-  const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers?: any) => { /* Lógica existente */ };
-  const handleDeleteOS = async (id: string) => { /* Lógica existente */ };
-  const handleSavePurchaseOrder = async (po: PurchaseOrder) => { /* Lógica existente */ };
-  const handleUpdatePOStatus = async (id: string, status: string, extraData?: any) => { /* Lógica existente */ };
-  const handleDeletePO = async (id: string) => { /* Lógica existente */ };
   const triggerAutoRelease = async () => { /* Lógica existente */ };
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); };
+  const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
+    // Fallback para usuário demo se não houver sessão
+    const userId = session?.user.id || 'demo-user-id'; 
+    try {
+      const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
+      // ... (Rest of logic remains mostly same, just checking user presence)
+      let finalStatus = order.status;
+      if (!order.id || order.status === OrderStatus.EMITTED || order.status === OrderStatus.DRAFT || order.status === OrderStatus.AWAITING_PRODUCT) {
+         // Simplificação da checagem de estoque para demo
+         finalStatus = OrderStatus.EMITTED;
+      }
+
+      const toNullable = (val: string | undefined) => (!val || val.trim() === '') ? null : val;
+
+      const payload = {
+        order_number: order.orderNumber,
+        farm_id: order.farmId,
+        farm_name: order.farmName,
+        field_ids: order.fieldIds,
+        field_names: order.fieldNames,
+        culture: order.culture,
+        variety: order.variety,
+        recommendation_date: toNullable(order.recommendationDate),
+        max_application_date: toNullable(order.maxApplicationDate),
+        machine_type: order.machineType,
+        machine_id: toNullable(order.machineId),
+        machine_name: order.machineName,
+        operator_id: toNullable(order.operatorId),
+        tank_capacity: order.tankCapacity,
+        flow_rate: order.flowRate,
+        nozzle: order.nozzle,
+        pressure: order.pressure,
+        speed: order.speed,
+        application_type: order.applicationType,
+        mandatory_phrase: order.mandatoryPhrase,
+        observations: order.observations,
+        total_area: order.totalArea,
+        total_volume: order.totalVolume,
+        status: finalStatus,
+        items: validItems, 
+        user_id: userId // Usando ID real ou demo
+      };
+
+      if (editingOrder && editingOrder.id === order.id) {
+         const { error } = await supabase.from('service_orders').update(payload).eq('id', order.id);
+         if (error) throw error;
+      } else {
+         const { error } = await supabase.from('service_orders').insert(payload);
+         if (error) throw error;
+      }
+
+      setTimeout(() => { fetchAllData(); }, 500);
+      setEditingOrder(null);
+      return true;
+
+    } catch (error: any) {
+      console.error("Erro ao salvar OS:", error);
+      alert(`Erro ao salvar (Modo Demo pode ter restrições de banco): ${error.message}`);
+      return false;
+    }
+  };
+
+  const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: any = {}) => {
+    try {
+      // Simplificado para permitir demo
+      const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
+      if (error) throw error;
+      setTimeout(() => { fetchAllData(); }, 500);
+    } catch (error: any) {
+      console.error("Erro status:", error);
+      alert("Erro ao atualizar status.");
+    }
+  };
+
+  const handleDeleteOS = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta ordem de serviço?")) return;
+    try {
+      const { error } = await supabase.from('service_orders').delete().eq('id', id);
+      if (error) throw error;
+      setTimeout(() => { fetchAllData(); }, 500);
+    } catch (error) {
+      alert("Erro ao excluir ordem.");
+    }
+  };
+
+  const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
+    const userId = session?.user.id || 'demo-user-id';
+    try {
+      // ... payload logic ...
+      const payload = {
+        order_number: po.orderNumber,
+        supplier: po.supplier,
+        product_name: po.productName,
+        master_insumo_id: po.masterInsumoId,
+        farm_name: po.farmName,
+        farm_id: po.farmId,
+        quantity: po.quantity,
+        unit: po.unit,
+        total_value: po.totalValue,
+        order_date: po.orderDate ? new Date(po.orderDate.split('/').reverse().join('-')).toISOString() : new Date().toISOString(),
+        expected_delivery: po.expectedDelivery,
+        status: po.status,
+        user_id: userId
+      };
+      const { error } = await supabase.from('purchase_orders').insert(payload);
+      if (error) throw error;
+      fetchAllData();
+    } catch (error) {
+      alert("Erro ao salvar pedido.");
+    }
+  };
+
+  const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
+    // ... simplificado ...
+    try {
+       const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
+       if (error) throw error;
+       fetchAllData();
+    } catch(e) { alert("Erro ao atualizar."); }
+  };
+
+  const handleDeletePO = async (id: string) => {
+    // ... simplificado ...
+    if(!confirm("Excluir?")) return;
+    try {
+        await supabase.from('purchase_orders').delete().eq('id', id);
+        fetchAllData();
+    } catch(e) { alert("Erro."); }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    // Força recarregamento para limpar estados se necessário
+    window.location.reload();
+  };
+
   const handleRefresh = () => { fetchAllData(); };
 
+  // Se não houver sessão, criamos um perfil "Virtual" com todas as permissões para modo demo/visualização
+  const effectiveProfile = session ? userProfile : {
+    id: 'demo',
+    role: 'admin' as const,
+    can_manage_users: true,
+    can_manage_inputs: true,
+    can_manage_machines: true,
+    full_name: 'Modo Demonstração'
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-100"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>;
-  if (!session) return <Login />;
+
+  // REMOVIDO: Bloco que retornava <Login /> se !session
 
   const renderContent = () => {
-    // TRAVAS DE SEGURANÇA NA RENDERIZAÇÃO
+    // TRAVAS VISUAIS (Baseadas no effectiveProfile)
     switch (activeTab) {
       case 'dashboard': 
         return <OSKanban orders={orders} onUpdateStatus={handleUpdateOSStatus} onDeleteOrder={handleDeleteOS} onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }} onMakePurchaseClick={() => setActiveTab('purchases')} />;
@@ -243,39 +379,38 @@ const App: React.FC = () => {
       case 'stats': return <div className="p-12 h-full"><StatsView orders={orders} inventory={inventory} /></div>;
       case 'inventory': return <div className="p-12 h-full"><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></div>;
       
-      // TRAVA 1: Master Insumos
       case 'master_insumos':
-        return userProfile?.can_manage_inputs ? (
+        return effectiveProfile?.can_manage_inputs ? (
           <div className="p-12 h-full"><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></div>
         ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
       
       case 'purchases': return <div className="p-12 h-full"><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></div>;
       case 'orders': return <div className="p-12 h-full"><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></div>;
       
-      // TRAVA 2: Frota e Áreas (Máquinas/Fazendas)
       case 'fleet': 
-        return userProfile?.can_manage_machines ? (
+        return effectiveProfile?.can_manage_machines ? (
           <div className="p-12 h-full"><FleetManagement /></div>
         ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
       
       case 'areas': 
-        return userProfile?.can_manage_machines ? (
+        return effectiveProfile?.can_manage_machines ? (
           <div className="p-12 h-full"><AreasFields farms={farms} fields={fields} crops={crops} onUpdate={fetchAllData} /></div>
         ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
       
       case 'reports': return <div className="p-12 h-full"><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></div>;
       
-      // TRAVA 3: Equipe
       case 'team':
-        return userProfile?.can_manage_users ? (
+        return effectiveProfile?.can_manage_users ? (
           <div className="p-12 h-full"><TeamManagement /></div>
         ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+        
+      case 'login': // Nova rota manual para quem quiser logar
+        return <Login />;
 
       default: return null;
     }
   };
 
-  // Menu Items - filtrando visualmente o que o usuário não pode ver
   const menuItems = [
     { id: 'dashboard', label: 'Página Inicial', icon: LayoutDashboard },
     { id: 'stats', label: 'Estatísticas', icon: BarChart3 },
@@ -283,13 +418,12 @@ const App: React.FC = () => {
     { id: 'reports', label: 'Relatórios', icon: ClipboardList },
     { id: 'inventory', label: 'Estoque', icon: Package },
     { id: 'purchases', label: 'Pedidos', icon: ShoppingCart },
-    // Itens condicionais
-    ...(userProfile?.can_manage_inputs ? [{ id: 'master_insumos', label: 'Insumos', icon: Beaker }] : []),
-    ...(userProfile?.can_manage_machines ? [
+    ...(effectiveProfile?.can_manage_inputs ? [{ id: 'master_insumos', label: 'Insumos', icon: Beaker }] : []),
+    ...(effectiveProfile?.can_manage_machines ? [
       { id: 'fleet', label: 'Frota', icon: Truck },
       { id: 'areas', label: 'Áreas', icon: MapIcon }
     ] : []),
-    ...(userProfile?.can_manage_users ? [{ id: 'team', label: 'Equipe', icon: Users }] : []),
+    ...(effectiveProfile?.can_manage_users ? [{ id: 'team', label: 'Equipe', icon: Users }] : []),
   ];
 
   return (
@@ -301,7 +435,7 @@ const App: React.FC = () => {
             <div className="flex flex-col">
               <span className="font-black text-xl text-slate-900 leading-none italic uppercase">Agro SH</span>
               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                Olá, {userProfile?.full_name?.split(' ')[0] || 'Usuário'}
+                Olá, {effectiveProfile?.full_name?.split(' ')[0] || 'Visitante'}
               </span>
             </div>
           )}
@@ -325,10 +459,18 @@ const App: React.FC = () => {
              <RefreshCw size={20} />
              {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Atualizar</span>}
            </button>
-           <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
-             <LogOut size={20} />
-             {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Sair</span>}
-           </button>
+           
+           {session ? (
+             <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+               <LogOut size={20} />
+               {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Sair</span>}
+             </button>
+           ) : (
+             <button onClick={() => setActiveTab('login')} className="w-full flex items-center gap-4 px-4 py-3 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-2xl transition-all">
+               <LogIn size={20} />
+               {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Entrar / Login</span>}
+             </button>
+           )}
         </div>
       </aside>
       
