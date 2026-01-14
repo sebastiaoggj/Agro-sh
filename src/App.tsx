@@ -45,6 +45,9 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   
+  // UUID válido para operações offline (Nil UUID)
+  const [offlineUserId] = useState('00000000-0000-0000-0000-000000000000');
+  
   // Estados Globais
   const [masterInsumos, setMasterInsumos] = useState<MasterInsumo[]>([]);
   const [inventory, setInventory] = useState<Insumo[]>([]);
@@ -68,7 +71,7 @@ const App: React.FC = () => {
           setSession(existingSession);
           await fetchUserProfile(existingSession.user.id);
         } else {
-          // Tenta fazer login automático com credenciais padrão
+          // Tenta fazer login automático
           const email = 'admin@agro.com';
           const password = 'admin123';
 
@@ -81,25 +84,13 @@ const App: React.FC = () => {
             setSession(signInData.session);
             await fetchUserProfile(signInData.session.user.id);
           } else {
-            console.log("Login automático falhou, tentando criar usuário admin...");
-            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-              email,
-              password,
-              options: { data: { full_name: 'ADMIN' } }
-            });
-
-            if (!signUpError && signUpData.session) {
-              setSession(signUpData.session);
-              await fetchUserProfile(signUpData.session.user.id);
-            } else {
-              console.warn("Falha crítica no auto-login (Modo Offline Ativado):", signUpError?.message || signInError?.message);
-              // Fallback para liberar a UI mesmo sem auth
-              createDummySession();
-            }
+            console.warn("Login automático falhou. Entrando em modo offline.");
+            // Não tenta criar usuário, apenas assume modo offline para evitar conflitos
+            createDummySession();
           }
         }
       } catch (e) {
-        console.error("Erro inesperado no login:", e);
+        console.error("Erro no login:", e);
         createDummySession();
       } finally {
         setAuthProcessing(false);
@@ -120,17 +111,15 @@ const App: React.FC = () => {
   }, []);
 
   const createDummySession = () => {
-    // Cria um perfil fictício para permitir o uso da interface
+    // Cria um perfil fictício com ID válido para permitir o uso
     setUserProfile({
-      id: 'local-admin',
+      id: offlineUserId,
       role: 'admin',
-      full_name: 'MODO LOCAL',
+      full_name: 'MODO OFFLINE',
       can_manage_inputs: true,
       can_manage_machines: true,
       can_manage_users: true
     });
-    // Opcional: setSession com objeto fake se precisar passar checagens de "if (session)"
-    // Mas a maioria das checagens abaixo usa "effectiveProfile" ou ignora sessão para leitura
   };
 
   const fetchUserProfile = async (userId: string) => {
@@ -160,7 +149,7 @@ const App: React.FC = () => {
   };
 
   const fetchAllData = async () => {
-    // Permite buscar dados mesmo sem sessão (RLS deve estar configurado para public ou a query falhará silenciosamente)
+    // Permite buscar dados mesmo sem sessão
     try {
       const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
@@ -277,14 +266,14 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Carrega dados independentemente do estado da sessão para garantir que algo apareça
+    // Carrega dados independentemente do estado da sessão
     fetchAllData();
   }, [session]);
 
   const triggerAutoRelease = async () => { /* Lógica existente */ };
 
   const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
-    const userId = session?.user?.id || 'local-admin'; // Fallback para ID local
+    const userId = session?.user?.id || offlineUserId;
     try {
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
       let finalStatus = order.status;
@@ -365,7 +354,7 @@ const App: React.FC = () => {
   };
 
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
-    const userId = session?.user?.id || 'local-admin';
+    const userId = session?.user?.id || offlineUserId;
     try {
       const payload = {
         order_number: po.orderNumber,
@@ -407,17 +396,14 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    // Sair apenas recarrega para re-autenticar (loop), mas limpa a sessão atual
     await supabase.auth.signOut();
     window.location.reload();
   };
 
   const handleRefresh = () => { fetchAllData(); };
 
-  // Usar o perfil carregado do banco de dados
   const effectiveProfile = userProfile;
 
-  // Tela de Carregamento Inicial (substitui a tela de login visualmente)
   if (authProcessing || loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-100 gap-6">
