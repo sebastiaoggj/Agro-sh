@@ -32,8 +32,13 @@ interface UserProfile {
 }
 
 const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
-  <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-emerald-600/20">
-    <Sprout size={24} />
+  <div className="w-12 h-12 bg-white rounded-xl flex flex-col items-center justify-center shrink-0 shadow-sm border border-slate-200 overflow-hidden p-1 group hover:border-blue-200 transition-colors">
+    <div className="flex items-center gap-0.5 mt-1">
+      <span className="text-[#0047AB] font-black text-2xl leading-none tracking-tighter">S</span>
+      <div className="w-1.5 h-1 bg-[#0047AB] rounded-[1px] mt-0.5"></div>
+      <span className="text-[#0047AB] font-black text-2xl leading-none tracking-tighter">H</span>
+    </div>
+    <span className="text-[#0047AB] font-bold text-[5px] uppercase tracking-wider transform scale-x-110 -mt-0.5">Agropecuária</span>
   </div>
 );
 
@@ -413,8 +418,13 @@ const App: React.FC = () => {
   if (authProcessing || loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-100 gap-6">
-        <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-emerald-600/30 rotate-3 animate-pulse">
-            <Sprout size={40} strokeWidth={2.5} />
+        <div className="w-24 h-24 bg-white rounded-3xl flex flex-col items-center justify-center shadow-xl shadow-slate-200 border border-slate-100 p-2 animate-pulse">
+            <div className="flex items-center gap-0.5">
+              <span className="text-[#0047AB] font-black text-4xl leading-none">S</span>
+              <div className="w-1.5 h-1.5 bg-[#0047AB] rounded-sm mt-1"></div>
+              <span className="text-[#0047AB] font-black text-4xl leading-none">H</span>
+            </div>
+            <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
         </div>
         <div className="flex flex-col items-center">
            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
@@ -488,8 +498,8 @@ const App: React.FC = () => {
           <SHLogo isSidebarOpen={isSidebarOpen} />
           {isSidebarOpen && (
             <div className="flex flex-col">
-              <span className="font-black text-xl text-slate-900 leading-none italic uppercase">SH Oliveira</span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
+              <span className="font-black text-lg text-slate-900 leading-none italic uppercase">SH Oliveira</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
               <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">
                 Olá, {effectiveProfile.full_name?.split(' ')[0] || 'Usuário'}
               </span>

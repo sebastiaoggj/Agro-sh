@@ -31,8 +31,13 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
       {/* Header */}
       <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4 break-inside-avoid">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-600 rounded-lg flex items-center justify-center text-white print:bg-emerald-600 print:text-white print-color-adjust-exact">
-            <Sprout size={32} />
+          <div className="w-16 h-16 bg-white border-2 border-[#0047AB] rounded-lg flex flex-col items-center justify-center p-1 print-color-adjust-exact">
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-[#0047AB] font-black text-3xl leading-none">S</span>
+              <div className="w-2 h-1 bg-[#0047AB]"></div>
+              <span className="text-[#0047AB] font-black text-3xl leading-none">H</span>
+            </div>
+            <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-0.5">Agropecuária</span>
           </div>
           <div>
             <h1 className="text-2xl font-black uppercase tracking-tighter italic">SH Oliveira</h1>

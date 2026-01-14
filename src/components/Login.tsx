@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Sprout, Lock, User, Loader2, ArrowRight } from 'lucide-react';
+import { Lock, User, Loader2, ArrowRight } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -74,10 +74,15 @@ const Login: React.FC = () => {
       <div className="bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-slate-200 relative z-10 animate-in fade-in zoom-in-95 duration-500">
         
         <div className="flex flex-col items-center mb-10">
-          <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-emerald-600/30 mb-6 rotate-3">
-            <Sprout size={40} strokeWidth={2.5} />
+          <div className="w-24 h-24 bg-white border-2 border-[#0047AB] rounded-2xl flex flex-col items-center justify-center p-2 mb-6 shadow-xl shadow-blue-500/10">
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-[#0047AB] font-black text-4xl leading-none">S</span>
+              <div className="w-2 h-1.5 bg-[#0047AB] rounded-sm mt-1"></div>
+              <span className="text-[#0047AB] font-black text-4xl leading-none">H</span>
+            </div>
+            <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Agro SH</h1>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Restrito ao Sistema</p>
         </div>
 
