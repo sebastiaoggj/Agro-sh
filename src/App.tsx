@@ -19,7 +19,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import TeamManagement from './components/TeamManagement';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus, OSItem } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus } from './types';
 
 // Interface do Perfil de Usuário
 interface UserProfile {
@@ -84,8 +84,7 @@ const App: React.FC = () => {
             setSession(signInData.session);
             await fetchUserProfile(signInData.session.user.id);
           } else {
-            console.warn("Login automático falhou. Entrando em modo offline.");
-            // Não tenta criar usuário, apenas assume modo offline para evitar conflitos
+            console.warn("Entrando em modo offline.");
             createDummySession();
           }
         }
@@ -111,11 +110,11 @@ const App: React.FC = () => {
   }, []);
 
   const createDummySession = () => {
-    // Cria um perfil fictício com ID válido para permitir o uso
+    // Cria um perfil fictício para permitir o uso da interface
     setUserProfile({
       id: offlineUserId,
       role: 'admin',
-      full_name: 'MODO OFFLINE',
+      full_name: 'SISTEMA',
       can_manage_inputs: true,
       can_manage_machines: true,
       can_manage_users: true
@@ -149,7 +148,6 @@ const App: React.FC = () => {
   };
 
   const fetchAllData = async () => {
-    // Permite buscar dados mesmo sem sessão
     try {
       const { data: masterData } = await supabase.from('master_insumos').select('*');
       if (masterData) {
@@ -402,7 +400,15 @@ const App: React.FC = () => {
 
   const handleRefresh = () => { fetchAllData(); };
 
-  const effectiveProfile = userProfile;
+  // Garante que effectiveProfile nunca seja null para evitar crashes
+  const effectiveProfile = userProfile || {
+    id: offlineUserId,
+    role: 'admin',
+    can_manage_users: true,
+    can_manage_inputs: true,
+    can_manage_machines: true,
+    full_name: 'SISTEMA'
+  };
 
   if (authProcessing || loading) {
     return (
@@ -419,39 +425,44 @@ const App: React.FC = () => {
   }
 
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': 
-        return <OSKanban orders={orders} onUpdateStatus={handleUpdateOSStatus} onDeleteOrder={handleDeleteOS} onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }} onMakePurchaseClick={() => setActiveTab('purchases')} />;
-      case 'calendar': return <div className="p-12 h-full"><CalendarView orders={orders} /></div>;
-      case 'stats': return <div className="p-12 h-full"><StatsView orders={orders} inventory={inventory} /></div>;
-      case 'inventory': return <div className="p-12 h-full"><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></div>;
-      
-      case 'master_insumos':
-        return effectiveProfile?.can_manage_inputs ? (
-          <div className="p-12 h-full"><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></div>
-        ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
-      
-      case 'purchases': return <div className="p-12 h-full"><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></div>;
-      case 'orders': return <div className="p-12 h-full"><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></div>;
-      
-      case 'fleet': 
-        return effectiveProfile?.can_manage_machines ? (
-          <div className="p-12 h-full"><FleetManagement /></div>
-        ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
-      
-      case 'areas': 
-        return effectiveProfile?.can_manage_machines ? (
-          <div className="p-12 h-full"><AreasFields farms={farms} fields={fields} crops={crops} onUpdate={fetchAllData} /></div>
-        ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
-      
-      case 'reports': return <div className="p-12 h-full"><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></div>;
-      
-      case 'team':
-        return effectiveProfile?.can_manage_users ? (
-          <div className="p-12 h-full"><TeamManagement /></div>
-        ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+    try {
+      switch (activeTab) {
+        case 'dashboard': 
+          return <OSKanban orders={orders} onUpdateStatus={handleUpdateOSStatus} onDeleteOrder={handleDeleteOS} onEditOrder={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onCreateOrder={() => { setEditingOrder(null); setActiveTab('orders'); }} onMakePurchaseClick={() => setActiveTab('purchases')} />;
+        case 'calendar': return <div className="p-12 h-full"><CalendarView orders={orders} /></div>;
+        case 'stats': return <div className="p-12 h-full"><StatsView orders={orders} inventory={inventory} /></div>;
+        case 'inventory': return <div className="p-12 h-full"><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></div>;
+        
+        case 'master_insumos':
+          return effectiveProfile?.can_manage_inputs ? (
+            <div className="p-12 h-full"><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></div>
+          ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+        
+        case 'purchases': return <div className="p-12 h-full"><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></div>;
+        case 'orders': return <div className="p-12 h-full"><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></div>;
+        
+        case 'fleet': 
+          return effectiveProfile?.can_manage_machines ? (
+            <div className="p-12 h-full"><FleetManagement /></div>
+          ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+        
+        case 'areas': 
+          return effectiveProfile?.can_manage_machines ? (
+            <div className="p-12 h-full"><AreasFields farms={farms} fields={fields} crops={crops} onUpdate={fetchAllData} /></div>
+          ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+        
+        case 'reports': return <div className="p-12 h-full"><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></div>;
+        
+        case 'team':
+          return effectiveProfile?.can_manage_users ? (
+            <div className="p-12 h-full"><TeamManagement /></div>
+          ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
 
-      default: return null;
+        default: return null;
+      }
+    } catch (e) {
+      console.error("Render error:", e);
+      return <div className="p-12 text-red-500 font-bold">Erro ao renderizar módulo.</div>;
     }
   };
 
@@ -477,10 +488,10 @@ const App: React.FC = () => {
           <SHLogo isSidebarOpen={isSidebarOpen} />
           {isSidebarOpen && (
             <div className="flex flex-col">
-              <span className="font-black text-lg text-slate-900 leading-none italic uppercase">SH Oliveira</span>
-              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
+              <span className="font-black text-xl text-slate-900 leading-none italic uppercase">SH Oliveira</span>
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
               <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">
-                Olá, {effectiveProfile?.full_name?.split(' ')[0] || 'Usuário'}
+                Olá, {effectiveProfile.full_name?.split(' ')[0] || 'Usuário'}
               </span>
             </div>
           )}

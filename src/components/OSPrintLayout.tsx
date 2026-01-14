@@ -11,16 +11,21 @@ interface OSPrintLayoutProps {
 }
 
 const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
-  // Cálculos para o layout
-  const totalVolume = order.totalVolume;
-  const tankCapacity = order.tankCapacity;
+  if (!order) return null;
+
+  // Cálculos seguros para o layout
+  const totalVolume = order.totalVolume || 0;
+  const tankCapacity = order.tankCapacity || 1; // Evita divisão por zero
   
   // Recalcula para exibição
-  const numberOfTanksExact = tankCapacity > 0 ? totalVolume / tankCapacity : 0;
+  const numberOfTanksExact = totalVolume / tankCapacity;
   const numberOfTanksFull = Math.floor(numberOfTanksExact);
   const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
   const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCapacity) : 0;
   
+  // Lista de itens segura
+  const items = order.items || [];
+
   return (
     <div className="hidden print:block w-full h-auto bg-white text-slate-900 p-8 print:p-0">
       {/* Header */}
@@ -36,7 +41,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
         </div>
         <div className="text-right">
           <h2 className="text-xl font-black uppercase tracking-widest text-slate-900">Ordem de Aplicação</h2>
-          <p className="text-lg font-bold text-slate-600">Nº {order.orderNumber}</p>
+          <p className="text-lg font-bold text-slate-600">Nº {order.orderNumber || '---'}</p>
         </div>
       </div>
 
@@ -46,7 +51,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           <MapPin size={32} className="text-emerald-600" />
           <div>
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Fazenda / Propriedade</p>
-            <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{order.farmName}</h3>
+            <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{order.farmName || 'Não Informado'}</h3>
           </div>
         </div>
         <div className="text-right">
@@ -64,28 +69,28 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
               <MapPin size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Talhão(ões)</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.fieldNames.join(', ')}</span>
+                <span className="text-sm font-black uppercase text-slate-900">{(order.fieldNames || []).join(', ') || '-'}</span>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Hash size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Área Total</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.totalArea.toLocaleString('pt-BR')} ha</span>
+                <span className="text-sm font-black uppercase text-slate-900">{(order.totalArea || 0).toLocaleString('pt-BR')} ha</span>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Sprout size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Cultura / Variedade</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.culture} - {order.variety}</span>
+                <span className="text-sm font-black uppercase text-slate-900">{order.culture || '-'} - {order.variety || '-'}</span>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Calendar size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Janela de Aplicação</span>
-                <span className="text-sm font-black uppercase text-slate-900">Até {new Date(order.maxApplicationDate).toLocaleDateString('pt-BR')}</span>
+                <span className="text-sm font-black uppercase text-slate-900">Até {order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : '-'}</span>
               </div>
             </div>
           </div>
@@ -96,7 +101,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
               <Tractor size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Máquina / Equipamento</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.machineName || 'Não Informado'} ({order.machineType})</span>
+                <span className="text-sm font-black uppercase text-slate-900">{order.machineName || 'Não Informado'} ({order.machineType || '-'})</span>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -117,7 +122,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
               <Gauge size={16} className="text-slate-400 mt-0.5" />
               <div>
                 <span className="text-[10px] font-bold text-slate-500 uppercase block">Configuração</span>
-                <span className="text-sm font-black uppercase text-slate-900">{order.pressure} / {order.nozzle || '-'}</span>
+                <span className="text-sm font-black uppercase text-slate-900">{order.pressure || '-'} / {order.nozzle || '-'}</span>
               </div>
             </div>
           </div>
@@ -131,7 +136,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             <Droplets size={14} className="text-slate-400" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Vazão L/ha</span>
           </div>
-          <p className="text-2xl font-black text-slate-900">{order.flowRate}</p>
+          <p className="text-2xl font-black text-slate-900">{order.flowRate || 0}</p>
         </div>
         <div className="border border-slate-200 border-l-4 border-l-blue-500 rounded-lg p-3 shadow-sm">
           <div className="flex items-center gap-2 mb-1">
@@ -152,7 +157,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             <Droplets size={14} className="text-slate-400" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Calda Total</span>
           </div>
-          <p className="text-2xl font-black text-slate-900">{order.totalVolume.toLocaleString('pt-BR')} <span className="text-xs ml-1 font-bold text-slate-400">L</span></p>
+          <p className="text-2xl font-black text-slate-900">{totalVolume.toLocaleString('pt-BR')} <span className="text-xs ml-1 font-bold text-slate-400">L</span></p>
         </div>
       </div>
 
@@ -171,12 +176,12 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-sm">
-            {order.items.map((item, idx) => (
+            {items.map((item, idx) => (
               <tr key={idx}>
-                <td className="px-4 py-3 font-black text-slate-900 uppercase">{item.productName}</td>
-                <td className="px-4 py-3 text-center font-bold text-slate-600">{item.dosePerHa}</td>
-                <td className="px-4 py-3 text-right font-black text-slate-900">{item.qtyPerTank.toFixed(2)}</td>
-                <td className="px-4 py-3 text-right font-bold text-slate-600">{item.qtyTotal.toFixed(2)}</td>
+                <td className="px-4 py-3 font-black text-slate-900 uppercase">{item.productName || 'Item Sem Nome'}</td>
+                <td className="px-4 py-3 text-center font-bold text-slate-600">{item.dosePerHa || 0}</td>
+                <td className="px-4 py-3 text-right font-black text-slate-900">{(item.qtyPerTank || 0).toFixed(2)}</td>
+                <td className="px-4 py-3 text-right font-bold text-slate-600">{(item.qtyTotal || 0).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -201,11 +206,13 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-amber-100 text-sm">
-              {order.items.map((item, idx) => {
-                 const partialQty = (item.qtyPerTank / order.tankCapacity) * partialTankVolume;
+              {items.map((item, idx) => {
+                 // Proteção contra divisão por zero se tankCapacity for 0 ou invalido
+                 const capacity = order.tankCapacity || 1;
+                 const partialQty = (item.qtyPerTank / capacity) * partialTankVolume;
                  return (
                   <tr key={idx}>
-                    <td className="px-4 py-3 font-bold text-slate-800 uppercase">{item.productName}</td>
+                    <td className="px-4 py-3 font-bold text-slate-800 uppercase">{item.productName || 'Item Sem Nome'}</td>
                     <td className="px-4 py-3 text-right font-black text-amber-700">{partialQty.toFixed(2)}</td>
                   </tr>
                  );
@@ -222,7 +229,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           <h4 className="text-sm font-black uppercase tracking-widest">Atenção Obrigatória</h4>
         </div>
         <p className="text-xs font-bold text-red-800 uppercase leading-relaxed">
-          {order.mandatoryPhrase}
+          {order.mandatoryPhrase || 'Sem avisos de segurança.'}
         </p>
       </div>
 
