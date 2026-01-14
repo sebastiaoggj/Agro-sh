@@ -700,7 +700,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900">
-      <aside className={`bg-white border-r border-slate-200 transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+      <aside className={`bg-white border-r border-slate-200 transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-64' : 'w-20'} print:hidden`}>
         <div className="p-8 flex items-center gap-4">
           <SHLogo isSidebarOpen={isSidebarOpen} />
           {isSidebarOpen && (

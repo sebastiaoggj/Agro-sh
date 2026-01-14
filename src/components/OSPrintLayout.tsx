@@ -22,7 +22,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
   const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCapacity) : 0;
   
   return (
-    <div className="hidden print:block absolute top-0 left-0 w-full min-h-screen bg-white z-[9999] p-10 text-slate-900">
+    <div className="hidden print:block w-full min-h-screen bg-white text-slate-900 p-8">
       {/* Header */}
       <div className="flex justify-between items-start mb-6 border-b-2 border-slate-800 pb-4 break-inside-avoid">
         <div className="flex items-center gap-4">
