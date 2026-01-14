@@ -9,15 +9,16 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sufixo interno para transformar usuário em email válido para o Supabase
-  const DOMAIN_SUFFIX = '@sistema.agro';
+  // Alterado para um domínio padrão (.com) para passar na validação do Supabase
+  const DOMAIN_SUFFIX = '@agro.com';
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const email = `${username.trim().toLowerCase()}${DOMAIN_SUFFIX}`;
+    const cleanUsername = username.trim().toLowerCase().replace(/\s/g, '');
+    const email = `${cleanUsername}${DOMAIN_SUFFIX}`;
 
     try {
       if (isLogin) {
@@ -28,23 +29,23 @@ const Login: React.FC = () => {
         });
         if (error) throw error;
       } else {
-        // CADASTRO (CRIAR CONTA)
+        // CADASTRO
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
-              full_name: username.toUpperCase(), // Usa o nome de usuário como Nome Completo inicial
+              full_name: username.toUpperCase(),
             }
           }
         });
         if (error) throw error;
         
-        // Se o cadastro for bem sucedido e não exigir confirmação de email (comum em dev/alguns setups)
-        // ou se o Supabase estiver configurado para auto-confirmar
-        if (data.user) {
-          alert("Usuário registrado com sucesso! O sistema fará o login automático ou você pode entrar agora.");
-          setIsLogin(true);
+        if (data.user && !data.session) {
+          setError("Cadastro realizado! Se o login não for automático, verifique se a confirmação de e-mail está desativada no seu Supabase.");
+        } else if (data.user) {
+          alert("Usuário registrado com sucesso!");
+          // O onAuthStateChange no App.tsx vai detectar o login automaticamente
         }
       }
     } catch (err: any) {
@@ -52,9 +53,11 @@ const Login: React.FC = () => {
       if (err.message.includes("Invalid login")) {
         setError("Usuário ou senha incorretos.");
       } else if (err.message.includes("already registered")) {
-        setError("Este usuário já existe.");
+        setError("Este usuário já existe. Tente fazer login.");
       } else if (err.message.includes("Password should be")) {
         setError("A senha deve ter pelo menos 6 caracteres.");
+      } else if (err.message.includes("valid email")) {
+        setError("Formato de usuário inválido. Use apenas letras e números.");
       } else {
         setError(err.message);
       }
@@ -65,13 +68,11 @@ const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Decor */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/5 rounded-full blur-3xl" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-3xl" />
 
       <div className="bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-slate-200 relative z-10 animate-in fade-in zoom-in-95 duration-500">
         
-        {/* Header */}
         <div className="flex flex-col items-center mb-10">
           <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-emerald-600/30 mb-6 rotate-3">
             <Sprout size={40} strokeWidth={2.5} />
@@ -80,7 +81,6 @@ const Login: React.FC = () => {
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Restrito ao Sistema</p>
         </div>
 
-        {/* Tabs */}
         <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
           <button 
             onClick={() => { setIsLogin(true); setError(null); }}
@@ -96,7 +96,6 @@ const Login: React.FC = () => {
           </button>
         </div>
         
-        {/* Form */}
         <form onSubmit={handleAuth} className="space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Usuário</label>
@@ -107,7 +106,7 @@ const Login: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all lowercase"
                 placeholder="ex: admin"
                 value={username}
-                onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))} // Remove espaços
+                onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
