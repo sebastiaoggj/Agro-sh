@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Lock, User, Loader2, ArrowRight } from 'lucide-react';
+import { Lock, User, Loader2, ArrowRight, Fingerprint } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,7 +9,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Alterado para um domínio padrão (.com) para passar na validação do Supabase
+  // Sufixo padrão para converter ID em email válido para o sistema
   const DOMAIN_SUFFIX = '@agro.com';
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -17,6 +17,7 @@ const Login: React.FC = () => {
     setError(null);
     setLoading(true);
 
+    // Remove espaços e converte para minúsculas para gerar o email interno
     const cleanUsername = username.trim().toLowerCase().replace(/\s/g, '');
     const email = `${cleanUsername}${DOMAIN_SUFFIX}`;
 
@@ -42,24 +43,21 @@ const Login: React.FC = () => {
         if (error) throw error;
         
         if (data.user && !data.session) {
-          setError("Cadastro realizado! Se o login não for automático, verifique se a confirmação de e-mail está desativada no seu Supabase.");
+          setError("Cadastro realizado! Aguarde a aprovação do administrador.");
         } else if (data.user) {
-          alert("Usuário registrado com sucesso!");
-          // O onAuthStateChange no App.tsx vai detectar o login automaticamente
+          alert("ID registrado com sucesso!");
         }
       }
     } catch (err: any) {
       console.error(err);
       if (err.message.includes("Invalid login")) {
-        setError("Usuário ou senha incorretos.");
+        setError("ID ou senha incorretos.");
       } else if (err.message.includes("already registered")) {
-        setError("Este usuário já existe. Tente fazer login.");
+        setError("Este ID já está em uso.");
       } else if (err.message.includes("Password should be")) {
         setError("A senha deve ter pelo menos 6 caracteres.");
-      } else if (err.message.includes("valid email")) {
-        setError("Formato de usuário inválido. Use apenas letras e números.");
       } else {
-        setError(err.message);
+        setError("Erro ao autenticar. Verifique suas credenciais.");
       }
     } finally {
       setLoading(false);
@@ -83,7 +81,7 @@ const Login: React.FC = () => {
             <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Restrito ao Sistema</p>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Corporativo</p>
         </div>
 
         <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
@@ -91,28 +89,30 @@ const Login: React.FC = () => {
             onClick={() => { setIsLogin(true); setError(null); }}
             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            Entrar
+            Acessar Painel
           </button>
           <button 
             onClick={() => { setIsLogin(false); setError(null); }}
             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${!isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            Criar Conta
+            Criar ID
           </button>
         </div>
         
         <form onSubmit={handleAuth} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Usuário</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">ID de Acesso</label>
             <div className="relative group">
-              <User className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+              <Fingerprint className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
               <input 
                 type="text" 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all lowercase"
-                placeholder="ex: admin"
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                placeholder="Ex: operador01"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                autoComplete="off"
+                autoCapitalize="none"
               />
             </div>
           </div>
@@ -147,7 +147,7 @@ const Login: React.FC = () => {
               <Loader2 className="animate-spin" size={20} />
             ) : (
               <>
-                {isLogin ? 'Acessar Painel' : 'Registrar Usuário'}
+                {isLogin ? 'Entrar no Sistema' : 'Registrar Novo ID'}
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </>
             )}
@@ -156,7 +156,7 @@ const Login: React.FC = () => {
 
         <div className="mt-8 text-center">
           <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">
-            Agro SH ERP &copy; 2024
+            SH Oliveira &copy; 2024
           </p>
         </div>
       </div>

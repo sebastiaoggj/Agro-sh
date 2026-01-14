@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Shield, Key, Check, X, 
-  RefreshCw, Lock, Unlock, UserCog
+  RefreshCw, Lock, Unlock, UserCog, Fingerprint
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
@@ -25,7 +25,7 @@ const TeamManagement: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Form States
-  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserId, setNewUserId] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newPasswordReset, setNewPasswordReset] = useState('');
@@ -36,6 +36,8 @@ const TeamManagement: React.FC = () => {
     machines: false
   });
 
+  const DOMAIN_SUFFIX = '@agro.com';
+
   useEffect(() => {
     fetchUsers();
   }, []);
@@ -44,12 +46,12 @@ const TeamManagement: React.FC = () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     
-    // Se estiver em modo demo (sem sessão), retorna lista vazia ou fictícia para não dar erro de RLS
+    // Se estiver em modo demo (sem sessão), retorna lista vazia ou fictícia
     if (!session) {
       setUsers([
         { 
           id: 'demo-admin', 
-          email: 'admin@demo.com', 
+          email: 'admin@agro.com', 
           full_name: 'Admin Demonstração', 
           role: 'admin', 
           can_manage_users: true, 
@@ -94,10 +96,14 @@ const TeamManagement: React.FC = () => {
   };
 
   const handleCreateUser = async () => {
-    if (!newUserEmail || !newUserPassword || !newUserName) {
+    if (!newUserId || !newUserPassword || !newUserName) {
       alert("Preencha todos os campos.");
       return;
     }
+
+    // Gerar email interno
+    const cleanId = newUserId.trim().toLowerCase().replace(/\s/g, '');
+    const email = `${cleanId}${DOMAIN_SUFFIX}`;
 
     setActionLoading(true);
     try {
@@ -106,10 +112,10 @@ const TeamManagement: React.FC = () => {
       if (!session) {
         // Simulação para modo demo
         setTimeout(() => {
-          alert("Modo Demonstração: Usuário criado virtualmente (não salvo no banco).");
+          alert("Modo Demonstração: Usuário criado virtualmente.");
           setUsers([...users, {
             id: `demo-${Date.now()}`,
-            email: newUserEmail,
+            email: email,
             full_name: newUserName,
             role: 'operator',
             can_manage_users: perms.users,
@@ -118,7 +124,7 @@ const TeamManagement: React.FC = () => {
             created_at: new Date().toISOString()
           }]);
           setIsModalOpen(false);
-          setNewUserEmail('');
+          setNewUserId('');
           setNewUserPassword('');
           setNewUserName('');
           setActionLoading(false);
@@ -134,7 +140,7 @@ const TeamManagement: React.FC = () => {
         },
         body: JSON.stringify({
           action: 'create',
-          email: newUserEmail,
+          email: email,
           password: newUserPassword,
           fullName: newUserName,
           permissions: {
@@ -149,9 +155,9 @@ const TeamManagement: React.FC = () => {
       
       if (!response.ok) throw new Error(result.error);
 
-      alert("Usuário criado com sucesso!");
+      alert("ID de usuário criado com sucesso!");
       setIsModalOpen(false);
-      setNewUserEmail('');
+      setNewUserId('');
       setNewUserPassword('');
       setNewUserName('');
       setPerms({ users: false, inputs: false, machines: false });
@@ -209,6 +215,11 @@ const TeamManagement: React.FC = () => {
     }
   };
 
+  // Helper para exibir apenas o ID (sem @agro.com)
+  const formatDisplayId = (email: string) => {
+    return email.split('@')[0];
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in duration-500 pb-20">
       {/* Header */}
@@ -221,7 +232,7 @@ const TeamManagement: React.FC = () => {
           onClick={() => setIsModalOpen(true)}
           className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-[2rem] flex items-center gap-3 font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 active:scale-95"
         >
-          <UserPlus size={18} strokeWidth={3} /> NOVO USUÁRIO
+          <UserPlus size={18} strokeWidth={3} /> NOVO ID
         </button>
       </div>
 
@@ -238,7 +249,10 @@ const TeamManagement: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{user.full_name || 'Sem Nome'}</h3>
-                  <p className="text-slate-400 text-xs font-bold">{user.email}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Fingerprint size={12} className="text-slate-400" />
+                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{formatDisplayId(user.email)}</p>
+                  </div>
                   <span className={`inline-block mt-2 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${user.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
                     {user.role === 'admin' ? 'Administrador Master' : 'Operador'}
                   </span>
@@ -297,7 +311,9 @@ const TeamManagement: React.FC = () => {
             
             <div className="space-y-4">
               <input type="text" placeholder="Nome Completo" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserName} onChange={e => setNewUserName(e.target.value)} />
-              <input type="email" placeholder="E-mail de Acesso" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} />
+              <div className="relative">
+                <input type="text" placeholder="ID de Acesso (Ex: joao.silva)" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserId} onChange={e => setNewUserId(e.target.value)} />
+              </div>
               <input type="password" placeholder="Senha Inicial" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} />
               
               <div className="pt-4 space-y-3">
@@ -315,7 +331,7 @@ const TeamManagement: React.FC = () => {
               disabled={actionLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/20 disabled:opacity-50"
             >
-              {actionLoading ? 'Processando...' : 'Cadastrar Usuário'}
+              {actionLoading ? 'Criando ID...' : 'Criar ID de Acesso'}
             </button>
           </div>
         </div>
