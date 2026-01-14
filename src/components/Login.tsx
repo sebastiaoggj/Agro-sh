@@ -1,64 +1,160 @@
-import React from 'react';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
+import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Sprout } from 'lucide-react';
+import { Sprout, Lock, User, Loader2, ArrowRight } from 'lucide-react';
 
 const Login: React.FC = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sufixo interno para transformar usuário em email válido para o Supabase
+  const DOMAIN_SUFFIX = '@sistema.agro';
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const email = `${username.trim().toLowerCase()}${DOMAIN_SUFFIX}`;
+
+    try {
+      if (isLogin) {
+        // LOGIN
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+      } else {
+        // CADASTRO (CRIAR CONTA)
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: username.toUpperCase(), // Usa o nome de usuário como Nome Completo inicial
+            }
+          }
+        });
+        if (error) throw error;
+        
+        // Se o cadastro for bem sucedido e não exigir confirmação de email (comum em dev/alguns setups)
+        // ou se o Supabase estiver configurado para auto-confirmar
+        if (data.user) {
+          alert("Usuário registrado com sucesso! O sistema fará o login automático ou você pode entrar agora.");
+          setIsLogin(true);
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.message.includes("Invalid login")) {
+        setError("Usuário ou senha incorretos.");
+      } else if (err.message.includes("already registered")) {
+        setError("Este usuário já existe.");
+      } else if (err.message.includes("Password should be")) {
+        setError("A senha deve ter pelo menos 6 caracteres.");
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-[2.5rem] shadow-xl w-full max-w-md border border-slate-200">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-600/20 mb-4">
-            <Sprout size={32} />
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-3xl" />
+
+      <div className="bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-slate-200 relative z-10 animate-in fade-in zoom-in-95 duration-500">
+        
+        {/* Header */}
+        <div className="flex flex-col items-center mb-10">
+          <div className="w-20 h-20 bg-emerald-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-emerald-600/30 mb-6 rotate-3">
+            <Sprout size={40} strokeWidth={2.5} />
           </div>
-          <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Agro SH</h1>
-          <p className="text-slate-400 text-xs font-black uppercase tracking-widest mt-1">Acesso ao Sistema</p>
+          <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">Agro SH</h1>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Restrito ao Sistema</p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
+          <button 
+            onClick={() => { setIsLogin(true); setError(null); }}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Entrar
+          </button>
+          <button 
+            onClick={() => { setIsLogin(false); setError(null); }}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${!isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Criar Conta
+          </button>
         </div>
         
-        <Auth
-          supabaseClient={supabase}
-          appearance={{
-            theme: ThemeSupa,
-            variables: {
-              default: {
-                colors: {
-                  brand: '#059669',
-                  brandAccent: '#047857',
-                  inputBorder: '#e2e8f0',
-                  inputBackground: '#f8fafc',
-                  inputText: '#0f172a',
-                },
-                radii: {
-                  borderRadiusButton: '1rem',
-                  inputBorderRadius: '1rem',
-                },
-              },
-            },
-            className: {
-              button: 'font-black uppercase tracking-widest text-xs py-4',
-              input: 'font-medium text-sm py-3',
-              label: 'font-black uppercase tracking-widest text-[10px] text-slate-400',
-            }
-          }}
-          providers={[]}
-          theme="light"
-          localization={{
-            variables: {
-              sign_in: {
-                email_label: 'E-mail',
-                password_label: 'Senha',
-                button_label: 'ENTRAR NO SISTEMA',
-              },
-              sign_up: {
-                link_text: 'Não tem uma conta? Cadastre-se',
-                button_label: 'CRIAR CONTA',
-                email_label: 'E-mail',
-                password_label: 'Senha',
-              }
-            }
-          }}
-        />
+        {/* Form */}
+        <form onSubmit={handleAuth} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Usuário</label>
+            <div className="relative group">
+              <User className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+              <input 
+                type="text" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all lowercase"
+                placeholder="ex: admin"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))} // Remove espaços
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Senha</label>
+            <div className="relative group">
+              <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+              <input 
+                type="password" 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 text-red-500 text-xs font-bold p-4 rounded-2xl border border-red-100 text-center animate-in shake">
+              {error}
+            </div>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-3 transition-all active:scale-[0.98] uppercase text-xs tracking-widest disabled:opacity-70 disabled:cursor-not-allowed group mt-2"
+          >
+            {loading ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : (
+              <>
+                {isLogin ? 'Acessar Painel' : 'Registrar Usuário'}
+                <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-8 text-center">
+          <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">
+            Agro SH ERP &copy; 2024
+          </p>
+        </div>
       </div>
     </div>
   );
