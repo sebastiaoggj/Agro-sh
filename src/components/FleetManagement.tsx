@@ -120,7 +120,16 @@ const FleetManagement: React.FC = () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
+      
+      if (!user) {
+        setTimeout(() => {
+          alert("Modo Demo: Registro salvo virtualmente.");
+          setModalOpen(false);
+          setLoading(false);
+          fetchData(); // Fake refresh
+        }, 800);
+        return;
+      }
 
       if (modalType === 'machine') {
         const payload = {
@@ -172,6 +181,12 @@ const FleetManagement: React.FC = () => {
     if (!confirm('Tem certeza que deseja excluir este registro?')) return;
     
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Modo Demo: Exclusão virtual.");
+        return;
+      }
+
       const table = type === 'machine' ? 'machines' : 'operators';
       await supabase.from(table).delete().eq('id', id);
       await fetchData();

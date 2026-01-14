@@ -57,7 +57,9 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
+      
+      // Fallback para Modo Demo
+      const userId = user?.id || 'demo-user';
 
       const payload = {
         name: formData.name.toUpperCase(),
@@ -66,8 +68,17 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
         category: formData.category || 'OUTROS',
         default_purchase_qty: formData.defaultPurchaseQty || 0,
         price: formData.price || 0,
-        user_id: user.id
+        user_id: userId
       };
+
+      if (!user) {
+        // Simulação se não estiver logado
+        alert("Modo Demo: Insumo salvo localmente (não persistido no banco). Recarregue a página para limpar.");
+        onRefresh(); // Isso não vai realmente adicionar, mas simula o "sucesso" na UI
+        setIsModalOpen(false);
+        setLoading(false);
+        return;
+      }
 
       if (editingItem) {
         const { error } = await supabase
@@ -98,6 +109,12 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
     if (!confirm("Deseja realmente excluir este insumo do catálogo mestre?")) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Modo Demo: Exclusão simulada.");
+        return;
+      }
+
       const { error } = await supabase
         .from('master_insumos')
         .delete()

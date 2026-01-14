@@ -42,6 +42,26 @@ const TeamManagement: React.FC = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Se estiver em modo demo (sem sessão), retorna lista vazia ou fictícia para não dar erro de RLS
+    if (!session) {
+      setUsers([
+        { 
+          id: 'demo-admin', 
+          email: 'admin@demo.com', 
+          full_name: 'Admin Demonstração', 
+          role: 'admin', 
+          can_manage_users: true, 
+          can_manage_inputs: true, 
+          can_manage_machines: true, 
+          created_at: new Date().toISOString() 
+        }
+      ]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('user_profiles')
       .select('*')
@@ -53,6 +73,12 @@ const TeamManagement: React.FC = () => {
   };
 
   const handleTogglePermission = async (userId: string, field: string, currentValue: boolean) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      alert("Modo Demonstração: Alterações de permissão não são salvas.");
+      return;
+    }
+
     // Optimistic update
     setUsers(users.map(u => u.id === userId ? { ...u, [field]: !currentValue } : u));
 
@@ -77,10 +103,33 @@ const TeamManagement: React.FC = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      if (!session) {
+        // Simulação para modo demo
+        setTimeout(() => {
+          alert("Modo Demonstração: Usuário criado virtualmente (não salvo no banco).");
+          setUsers([...users, {
+            id: `demo-${Date.now()}`,
+            email: newUserEmail,
+            full_name: newUserName,
+            role: 'operator',
+            can_manage_users: perms.users,
+            can_manage_inputs: perms.inputs,
+            can_manage_machines: perms.machines,
+            created_at: new Date().toISOString()
+          }]);
+          setIsModalOpen(false);
+          setNewUserEmail('');
+          setNewUserPassword('');
+          setNewUserName('');
+          setActionLoading(false);
+        }, 1000);
+        return;
+      }
+      
       const response = await fetch('https://qlvhiinpbniiqgyayrwf.supabase.co/functions/v1/manage-users', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -111,7 +160,7 @@ const TeamManagement: React.FC = () => {
     } catch (error: any) {
       alert(`Erro: ${error.message}`);
     } finally {
-      setActionLoading(false);
+      if (actionLoading) setActionLoading(false);
     }
   };
 
@@ -122,16 +171,27 @@ const TeamManagement: React.FC = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
+      if (!session) {
+        setTimeout(() => {
+          alert("Modo Demonstração: Senha alterada virtualmente.");
+          setIsResetModalOpen(false);
+          setNewPasswordReset('');
+          setSelectedUser(null);
+          setActionLoading(false);
+        }, 1000);
+        return;
+      }
+      
       const response = await fetch('https://qlvhiinpbniiqgyayrwf.supabase.co/functions/v1/manage-users', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           action: 'reset_password',
           password: newPasswordReset,
-          permissions: { userId: selectedUser.id } // Usando campo permissions para passar ID
+          permissions: { userId: selectedUser.id }
         })
       });
 
@@ -145,7 +205,7 @@ const TeamManagement: React.FC = () => {
     } catch (error: any) {
       alert(`Erro: ${error.message}`);
     } finally {
-      setActionLoading(false);
+      if (actionLoading) setActionLoading(false);
     }
   };
 
