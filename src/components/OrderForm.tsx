@@ -8,7 +8,8 @@ import {
   AlertCircle, ChevronLeft, CheckCircle2,
   Printer, Share2, FileText, LayoutDashboard,
   Sparkles, Check, Search as SearchIcon,
-  Loader2, FlaskConical, AlertTriangle
+  Loader2, FlaskConical, AlertTriangle,
+  PackageX
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -48,6 +49,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const [isFieldDropdownOpen, setIsFieldDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedOrder, setSavedOrder] = useState<ServiceOrder | null>(null);
+  const [stockWarning, setStockWarning] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState({
@@ -196,6 +198,38 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setItems(newItems);
   };
 
+  // Check stock availability
+  const checkStockAvailability = () => {
+    const missingItems: string[] = [];
+    
+    items.forEach(item => {
+      if (!item.insumoId) return;
+      const stockItem = insumos.find(i => i.id === item.insumoId);
+      if (!stockItem) return;
+
+      // Se estamos editando uma ordem já EMITIDA, precisamos "devolver" a quantidade dela ao saldo disponível para testar
+      // Porém, para simplificar e garantir segurança, verificamos apenas o disponível atual.
+      // Se Available < Needed, falta produto.
+      
+      // Lógica aprimorada: 
+      // Se a ordem atual JÁ ESTÁ emitida, sua quantidade já foi descontada do Available.
+      // Então RealAvailable = Available + (QuantidadeDestaOrdemSeEmitida).
+      let currentOrderUsage = 0;
+      if (initialData && initialData.status === OrderStatus.EMITTED) {
+         const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
+         if (initialItem) currentOrderUsage = initialItem.qtyTotal;
+      }
+
+      const realAvailable = stockItem.availableQty + currentOrderUsage;
+
+      if (item.qtyTotal > realAvailable) {
+        missingItems.push(`${item.productName} (Falta ${(item.qtyTotal - realAvailable).toFixed(2)} ${item.unit})`);
+      }
+    });
+
+    return missingItems;
+  };
+
   const handleNext = () => {
     if (!formData.farmId || formData.fieldIds.length === 0) {
       alert("Por favor, selecione a fazenda e ao menos um talhão.");
@@ -205,6 +239,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
       alert("Por favor, informe a Vazão (L/ha) para calcular a calda.");
       return;
     }
+
+    // Verificar estoque antes de ir para o resumo
+    const missing = checkStockAvailability();
+    if (missing.length > 0) {
+      setStockWarning(`Estoque insuficiente para: ${missing.join(', ')}. A ordem será gerada como "Aguardando Produto".`);
+    } else {
+      setStockWarning(null);
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setStep('SUMMARY');
   };
@@ -214,9 +257,22 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setIsSaving(true);
     
     const validItems = items.filter(i => i.insumoId && i.insumoId !== '');
+    const missing = checkStockAvailability();
     
+    // Se houver itens faltando, força o status para AGUARDANDO PRODUTO
+    let finalStatus = formData.status;
+    
+    if (missing.length > 0) {
+      finalStatus = OrderStatus.AWAITING_PRODUCT;
+    } else if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
+      // Se estava aguardando produto mas agora tem saldo, sugerimos Emitir (ou o usuário pode ter trocado manualmente)
+      // Mantemos o que o usuário escolheu no form (que padroniza para Emitted)
+      finalStatus = OrderStatus.EMITTED;
+    }
+
     const finalOrder: ServiceOrder = {
       ...formData,
+      status: finalStatus, // Aplica o status corrigido
       id: formData.id || Date.now().toString(),
       farmName: selectedFarm?.name || '',
       fieldNames: selectedFields.map(f => f.name),
@@ -252,15 +308,26 @@ const OrderForm: React.FC<OrderFormProps> = ({
         <div className="max-w-4xl mx-auto py-12 animate-in zoom-in-95 duration-500 px-4 print:hidden">
           <div className="bg-white border border-slate-200 rounded-[3rem] p-12 md:p-24 text-center shadow-xl space-y-12 relative overflow-hidden">
              <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50" />
-            <div className="w-28 h-28 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-emerald-500/30 rotate-3 group hover:rotate-6 transition-transform">
-              <CheckCircle2 size={56} strokeWidth={2.5} />
-            </div>
+            
+            {savedOrder?.status === OrderStatus.AWAITING_PRODUCT ? (
+              <div className="w-28 h-28 bg-amber-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-amber-500/30">
+                <PackageX size={56} strokeWidth={2.5} />
+              </div>
+            ) : (
+              <div className="w-28 h-28 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center text-white mx-auto shadow-2xl shadow-emerald-500/30 rotate-3 group hover:rotate-6 transition-transform">
+                <CheckCircle2 size={56} strokeWidth={2.5} />
+              </div>
+            )}
+
             <div className="space-y-4">
               <h2 className="text-4xl md:text-6xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
-                {initialData ? 'Atualizado!' : 'Emitido!'}
+                {savedOrder?.status === OrderStatus.AWAITING_PRODUCT ? 'Aguardando Estoque' : 'Ordem Emitida!'}
               </h2>
               <p className="text-slate-500 font-bold uppercase text-xs tracking-[0.2em] max-w-md mx-auto leading-relaxed">
-                A ordem <span className="text-emerald-600 font-black">#{formData.orderNumber}</span> já está disponível no painel.
+                {savedOrder?.status === OrderStatus.AWAITING_PRODUCT 
+                  ? `A ordem #${formData.orderNumber} foi salva, mas aguarda a compra/entrada de insumos para ser liberada.`
+                  : `A ordem #${formData.orderNumber} já está disponível no painel e o estoque foi reservado.`
+                }
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-6">
@@ -280,6 +347,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
   if (step === 'SUMMARY') {
     return (
       <div className="max-w-5xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-right-8 duration-500">
+        
+        {stockWarning && (
+          <div className="bg-amber-50 border border-amber-200 rounded-[2rem] p-6 flex items-start gap-4 shadow-sm animate-in slide-in-from-top-4">
+            <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-amber-800 uppercase tracking-tight">Atenção: Saldo Insuficiente</h3>
+              <p className="text-xs font-bold text-amber-700 mt-1 uppercase tracking-wide leading-relaxed">
+                {stockWarning}
+              </p>
+              <p className="text-[10px] font-black text-amber-600/70 mt-2 uppercase tracking-widest">
+                Esta ordem não reservará estoque até que os produtos entrem no sistema.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-xl">
           <div className="p-10 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
             <div>
@@ -407,13 +492,17 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <button onClick={() => setStep('FORM')} className="px-10 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-all flex items-center justify-center gap-3" disabled={isSaving}>
                 <ChevronLeft size={18} /> AJUSTAR DADOS
               </button>
-              <button onClick={handleConfirm} className="px-14 py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-4 transition-all active:scale-95 group disabled:opacity-70 disabled:cursor-not-allowed" disabled={isSaving}>
+              <button 
+                onClick={handleConfirm} 
+                className={`px-14 py-5 ${stockWarning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-500'} text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl flex items-center justify-center gap-4 transition-all active:scale-95 group disabled:opacity-70 disabled:cursor-not-allowed`} 
+                disabled={isSaving}
+              >
                 {isSaving ? (
                   <>SALVANDO <Loader2 size={22} className="animate-spin" /></>
                 ) : (
                   <>
-                    CONFIRMAR E EMITIR
-                    <CheckCircle2 size={22} className="group-hover:rotate-12 transition-transform" />
+                    {stockWarning ? 'SALVAR COMO AGUARDANDO' : 'CONFIRMAR E EMITIR'}
+                    {stockWarning ? <PackageX size={22} /> : <CheckCircle2 size={22} className="group-hover:rotate-12 transition-transform" />}
                   </>
                 )}
               </button>

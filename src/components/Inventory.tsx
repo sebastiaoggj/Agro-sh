@@ -16,7 +16,7 @@ interface InventoryProps {
   farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
   onRefresh: () => void;
-  onStockChange?: () => void; // Novo prop opcional
+  onStockChange?: () => void;
 }
 
 const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh, onStockChange }) => {
@@ -26,7 +26,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const [activeActionModal, setActiveActionModal] = useState<'ENTRADA_MANUAL' | 'BAIXA_MANUAL' | 'TRANSFERIR' | 'HISTORICO' | null>(null);
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<Insumo | null>(null);
 
-  // Form States
   const [formQty, setFormQty] = useState('');
   const [selectedMasterId, setSelectedMasterId] = useState(''); 
   const [formReason, setFormReason] = useState('');
@@ -56,7 +55,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setActiveActionModal('HISTORICO');
   };
 
-  // Função para recalcular reservas
   const handleFixReserves = async () => {
     if (!confirm("Isso irá recalcular todas as quantidades reservadas baseando-se apenas nas Ordens 'Emitida'. Deseja continuar?")) return;
     
@@ -137,7 +135,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        if (qty > targetItem.physicalStock) { // Validação baseada no físico, não no disponível
+        if (qty > targetItem.physicalStock) {
           alert("Quantidade superior ao estoque físico.");
           setLoading(false);
           return;
@@ -171,7 +169,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        if (qty > originItem.physicalStock) { // Validação baseada no físico
+        if (qty > originItem.physicalStock) {
           alert("Quantidade insuficiente em estoque físico.");
           setLoading(false);
           return;
@@ -327,8 +325,8 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredItems.map((item) => {
-                const available = item.physicalStock - item.reservedQty;
-                const isDeficit = available < 0;
+                // Cálculo de visualização (Clamp at 0)
+                const available = Math.max(0, item.physicalStock - item.reservedQty);
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
@@ -348,20 +346,9 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                       <span className="text-orange-500 font-black text-base">{item.reservedQty.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </td>
                     <td className="px-10 py-8 text-center">
-                      {isDeficit ? (
-                        <div className="flex flex-col items-center animate-in fade-in">
-                          <span className="text-red-500 font-black text-lg">
-                            {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="flex items-center gap-1 text-[8px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded uppercase tracking-widest mt-1">
-                            <AlertTriangle size={8} /> Sobrecarga
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-emerald-600 font-black text-lg">
-                          {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </span>
-                      )}
+                      <span className="text-emerald-600 font-black text-lg">
+                        {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
                     </td>
                     <td className="px-10 py-8">
                       <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
