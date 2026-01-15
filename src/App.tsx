@@ -413,12 +413,68 @@ const App: React.FC = () => {
 
   const handleUpdateOSStatus = async (id: string, newStatus: OrderStatus, leftovers: any = {}) => {
     try {
-      const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
-      if (error) throw error;
+      const userId = session?.user?.id || offlineUserId;
+      const userName = userProfile?.full_name || 'Sistema';
+
+      // 1. INICIAR APLICAÇÃO (Baixa de Estoque)
+      if (newStatus === OrderStatus.IN_PROGRESS) {
+         const { error } = await supabase.rpc('start_service_order', {
+           p_order_id: id,
+           p_user_id: userId,
+           p_user_name: userName
+         });
+         
+         if (error) throw error;
+         alert("Aplicação iniciada! Estoque baixado com sucesso.");
+      }
+      // 2. FINALIZAR APLICAÇÃO (Retorno de Sobras)
+      else if (newStatus === OrderStatus.COMPLETED) {
+         // Primeiro atualiza o status
+         const { error: updateError } = await supabase
+           .from('service_orders')
+           .update({ status: newStatus })
+           .eq('id', id);
+           
+         if (updateError) throw updateError;
+
+         // Se houver sobras, devolve ao estoque
+         if (leftovers && Object.keys(leftovers).length > 0) {
+            for (const [insumoId, qty] of Object.entries(leftovers)) {
+               if (Number(qty) > 0) {
+                 // Buscar estoque atual
+                 const { data: currentInv } = await supabase.from('inventory').select('physical_stock').eq('id', insumoId).single();
+                 if (currentInv) {
+                   await supabase.from('inventory').update({
+                     physical_stock: Number(currentInv.physical_stock) + Number(qty)
+                   }).eq('id', insumoId);
+                   
+                   // Log de retorno
+                   await supabase.from('stock_history').insert({
+                     inventory_id: insumoId,
+                     type: 'ENTRADA',
+                     description: `Retorno de sobra da OS (Finalização)`,
+                     quantity: Number(qty),
+                     user_name: userName,
+                     user_id: userId
+                   });
+                 }
+               }
+            }
+            alert("Ordem finalizada e sobras devolvidas ao estoque!");
+         } else {
+            alert("Ordem finalizada com sucesso!");
+         }
+      }
+      // 3. OUTRAS TRANSIÇÕES (Apenas troca de status)
+      else {
+        const { error } = await supabase.from('service_orders').update({ status: newStatus }).eq('id', id);
+        if (error) throw error;
+      }
+      
       setTimeout(() => { fetchAllData(); }, 500);
     } catch (error: any) {
       console.error("Erro status:", error);
-      alert("Erro ao atualizar status.");
+      alert("Erro ao atualizar status: " + error.message);
     }
   };
 
@@ -521,7 +577,7 @@ const App: React.FC = () => {
        const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
        if (error) throw error;
        
-       await fetchAllData();
+       fetchAllData();
        
        if (status === PurchaseOrderStatus.RECEIVED) {
          alert("Recebimento confirmado e estoque atualizado!");
