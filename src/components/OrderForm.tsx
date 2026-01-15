@@ -157,7 +157,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'farmId') {
+      // Quando muda a fazenda, limpa os talhões selecionados E os itens da composição
       setFormData(prev => ({ ...prev, farmId: value, fieldIds: [] }));
+      setItems([]); 
     } else if (name === 'culture') {
       setFormData(prev => ({ ...prev, culture: value, variety: '' }));
     } else {
@@ -212,9 +214,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const stockItem = insumos.find(i => i.id === item.insumoId);
       if (!stockItem) return;
 
-      // Lógica de saldo: Considera o estoque disponível atual.
-      // Se for edição de ordem já emitida, o ideal seria "devolver" virtualmente o saldo para recalcular,
-      // mas para segurança, usamos o disponível atual + o consumo desta ordem se ela já estiver emitida.
+      // Lógica aprimorada: 
+      // Se a ordem atual JÁ ESTÁ emitida, sua quantidade já foi descontada do Available.
+      // Então RealAvailable = Available + (QuantidadeDestaOrdemSeEmitida).
       let currentOrderUsage = 0;
       if (initialData && initialData.status === OrderStatus.EMITTED) {
          const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
@@ -266,7 +268,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     if (missing.length > 0) {
       finalStatus = OrderStatus.AWAITING_PRODUCT;
     } else if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
-      // Se estava aguardando mas agora tem saldo, sugerimos Emitir (padrão do form)
       finalStatus = OrderStatus.EMITTED;
     }
 
@@ -292,10 +293,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
   };
 
   const availableInsumos = useMemo(() => {
-    if (!formData.farmId) return insumos;
+    if (!formData.farmId) return []; // Se não tem fazenda, não mostra insumos
+    
     const farmName = farms.find(f => f.id === formData.farmId)?.name;
-    if (!farmName) return insumos;
-    return insumos.filter(i => i.farm === farmName || i.availableQty > 0);
+    if (!farmName) return [];
+
+    // Filtra estritamente pelo nome da fazenda
+    // A comparação é feita normalizando para evitar erros de case/espaços
+    return insumos.filter(i => 
+      i.farm.trim().toLowerCase() === farmName.trim().toLowerCase()
+    );
   }, [insumos, formData.farmId, farms]);
 
   const handlePrint = () => window.print();
@@ -758,7 +765,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 <Droplets size={22} strokeWidth={2.5} />
                 <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Composição da Calda</h3>
               </div>
-              <button onClick={addProduct} className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black flex items-center gap-3 transition-all shadow-xl active:scale-95">
+              <button 
+                onClick={addProduct} 
+                className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl text-[10px] font-black flex items-center gap-3 transition-all shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!formData.farmId}
+                title={!formData.farmId ? "Selecione uma fazenda primeiro" : "Adicionar produto"}
+              >
                 <Plus size={18} strokeWidth={3} /> ADICIONAR INSUMO
               </button>
             </div>
@@ -772,9 +784,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-6 gap-8 items-end">
                     <div className="md:col-span-3 space-y-2">
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Produto Composto</label>
-                      <select className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={item.insumoId} onChange={(e) => updateItem(idx, e.target.value, item.dosePerHa)}>
-                        <option value="">BUSCAR NO ALMOXARIFADO...</option>
-                        {availableInsumos.map(ins => <option key={ins.id} value={ins.id}>{ins.name} ({ins.farm})</option>)}
+                      <select 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" 
+                        value={item.insumoId} 
+                        onChange={(e) => updateItem(idx, e.target.value, item.dosePerHa)}
+                      >
+                        <option value="">
+                          {availableInsumos.length > 0 ? "SELECIONE O PRODUTO..." : "NENHUM PRODUTO NESTA FAZENDA"}
+                        </option>
+                        {availableInsumos.map(ins => (
+                          <option key={ins.id} value={ins.id}>
+                            {ins.name} (Disp: {ins.availableQty.toLocaleString('pt-BR')} {ins.unit})
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div className="md:col-span-1 space-y-2">
@@ -797,6 +819,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   </div>
                 </div>
               ))}
+              
+              {items.length === 0 && (
+                <div className="p-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-center text-slate-400">
+                  <p className="text-xs font-black uppercase tracking-widest">Nenhum insumo adicionado</p>
+                  <p className="text-[10px] font-bold mt-1 opacity-70">
+                    {!formData.farmId ? "Selecione uma fazenda acima para liberar os produtos." : "Clique em 'Adicionar Insumo' para compor a calda."}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
