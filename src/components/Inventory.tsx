@@ -5,7 +5,7 @@ import {
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
   User, ClipboardList, MinusCircle,
-  ShieldCheck
+  ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -137,14 +137,14 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        if (qty > targetItem.availableQty) {
-          alert("Quantidade superior ao disponível.");
+        if (qty > targetItem.physicalStock) { // Validação baseada no físico, não no disponível
+          alert("Quantidade superior ao estoque físico.");
           setLoading(false);
           return;
         }
 
         await supabase.from('inventory').update({
-          physical_stock: targetItem.physicalStock - qty
+          physical_stock: Math.max(0, targetItem.physicalStock - qty)
         }).eq('id', targetItem.id);
 
         await supabase.from('stock_history').insert({
@@ -171,14 +171,14 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        if (qty > originItem.availableQty) {
-          alert("Quantidade insuficiente.");
+        if (qty > originItem.physicalStock) { // Validação baseada no físico
+          alert("Quantidade insuficiente em estoque físico.");
           setLoading(false);
           return;
         }
 
         await supabase.from('inventory').update({
-          physical_stock: originItem.physicalStock - qty
+          physical_stock: Math.max(0, originItem.physicalStock - qty)
         }).eq('id', originItem.id);
 
         await supabase.from('stock_history').insert({
@@ -326,45 +326,63 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredItems.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
-                  <td className="px-10 py-8">
-                    <div className="flex items-center gap-4">
-                      <ArrowDownRight size={14} className="text-emerald-500 shrink-0" />
-                      <span className="font-black text-slate-900 text-sm uppercase tracking-tight">{item.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-10 py-8">
-                    <span className="text-slate-500 text-[11px] font-bold tracking-tight uppercase">{item.activeIngredient}</span>
-                  </td>
-                  <td className="px-10 py-8 text-center">
-                    <span className="text-blue-600 font-black text-lg">{item.physicalStock.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </td>
-                  <td className="px-10 py-8 text-center">
-                    <span className="text-orange-500 font-black text-base">{item.reservedQty.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </td>
-                  <td className="px-10 py-8 text-center">
-                    <span className="text-emerald-600 font-black text-lg">{(item.physicalStock - item.reservedQty).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </td>
-                  <td className="px-10 py-8">
-                    <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
-                  </td>
-                  <td className="px-10 py-8 text-center">
-                    <span className="text-slate-500 text-[10px] font-black">{item.unit}</span>
-                  </td>
-                  <td className="px-10 py-8">
-                    <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{item.category}</span>
-                  </td>
-                  <td className="px-10 py-8 text-right print:hidden">
-                    <button 
-                      onClick={() => handleHistoryClick(item)} 
-                      className="flex items-center gap-2 ml-auto text-slate-400 hover:text-slate-900 transition-all text-[10px] font-black uppercase tracking-widest italic"
-                    >
-                      <History size={14} /> HISTÓRICO
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filteredItems.map((item) => {
+                const available = item.physicalStock - item.reservedQty;
+                const isDeficit = available < 0;
+
+                return (
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
+                    <td className="px-10 py-8">
+                      <div className="flex items-center gap-4">
+                        <ArrowDownRight size={14} className="text-emerald-500 shrink-0" />
+                        <span className="font-black text-slate-900 text-sm uppercase tracking-tight">{item.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-10 py-8">
+                      <span className="text-slate-500 text-[11px] font-bold tracking-tight uppercase">{item.activeIngredient}</span>
+                    </td>
+                    <td className="px-10 py-8 text-center">
+                      <span className="text-blue-600 font-black text-lg">{item.physicalStock.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </td>
+                    <td className="px-10 py-8 text-center">
+                      <span className="text-orange-500 font-black text-base">{item.reservedQty.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </td>
+                    <td className="px-10 py-8 text-center">
+                      {isDeficit ? (
+                        <div className="flex flex-col items-center animate-in fade-in">
+                          <span className="text-red-500 font-black text-lg">
+                            {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="flex items-center gap-1 text-[8px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded uppercase tracking-widest mt-1">
+                            <AlertTriangle size={8} /> Sobrecarga
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-emerald-600 font-black text-lg">
+                          {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-10 py-8">
+                      <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
+                    </td>
+                    <td className="px-10 py-8 text-center">
+                      <span className="text-slate-500 text-[10px] font-black">{item.unit}</span>
+                    </td>
+                    <td className="px-10 py-8">
+                      <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{item.category}</span>
+                    </td>
+                    <td className="px-10 py-8 text-right print:hidden">
+                      <button 
+                        onClick={() => handleHistoryClick(item)} 
+                        className="flex items-center gap-2 ml-auto text-slate-400 hover:text-slate-900 transition-all text-[10px] font-black uppercase tracking-widest italic"
+                      >
+                        <History size={14} /> HISTÓRICO
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredItems.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-10 py-20 text-center">
@@ -500,7 +518,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                       onChange={(e) => setSelectedMasterId(e.target.value)}
                     >
                       <option value="">Selecionar para dar Baixa...</option>
-                      {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} - {i.farm} ({i.availableQty} {i.unit})</option>)}
+                      {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} - {i.farm} (Físico: {i.physicalStock} {i.unit})</option>)}
                     </select>
                   </div>
                 </div>
@@ -518,7 +536,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                         onChange={(e) => setSelectedMasterId(e.target.value)}
                       >
                         <option value="">Selecionar Origem...</option>
-                        {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} ({i.farm}) - Disp: {i.availableQty} {i.unit}</option>)}
+                        {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} ({i.farm}) - Físico: {i.physicalStock} {i.unit}</option>)}
                       </select>
                     </div>
                   </div>
