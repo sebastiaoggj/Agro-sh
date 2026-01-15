@@ -279,10 +279,10 @@ const App: React.FC = () => {
     const userId = session?.user?.id || offlineUserId;
     try {
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
+      
+      // FIX: Removida a lógica que forçava o status para EMITTED.
+      // Agora respeitamos o status vindo do OrderForm, que pode ser AWAITING_PRODUCT se faltar estoque.
       let finalStatus = order.status;
-      if (!order.id || order.status === OrderStatus.EMITTED || order.status === OrderStatus.DRAFT || order.status === OrderStatus.AWAITING_PRODUCT) {
-         finalStatus = OrderStatus.EMITTED;
-      }
 
       const toNullable = (val: string | undefined) => (!val || val.trim() === '') ? null : val;
 
