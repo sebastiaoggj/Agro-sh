@@ -205,7 +205,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setItems(newItems);
   };
 
-  // Check stock availability
+  // Check stock availability (returns array of missing items)
   const checkStockAvailability = () => {
     const missingItems: string[] = [];
     
@@ -214,9 +214,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const stockItem = insumos.find(i => i.id === item.insumoId);
       if (!stockItem) return;
 
-      // Lógica aprimorada: 
-      // Se a ordem atual JÁ ESTÁ emitida, sua quantidade já foi descontada do Available.
-      // Então RealAvailable = Available + (QuantidadeDestaOrdemSeEmitida).
+      // Lógica de saldo: Considera o estoque disponível atual.
+      // Se for edição de ordem já emitida, "devolvemos" o consumo dela para verificar se ainda cabe.
       let currentOrderUsage = 0;
       if (initialData && initialData.status === OrderStatus.EMITTED) {
          const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
@@ -225,12 +224,29 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       const realAvailable = stockItem.availableQty + currentOrderUsage;
 
-      if (item.qtyTotal > realAvailable) {
-        missingItems.push(`${item.productName} (Falta ${(item.qtyTotal - realAvailable).toFixed(2)} ${item.unit})`);
+      // Usando uma margem de erro pequena para ponto flutuante
+      if (item.qtyTotal > (realAvailable + 0.001)) {
+        missingItems.push(`${item.productName} (Necessário: ${item.qtyTotal.toFixed(2)} | Disponível: ${realAvailable.toFixed(2)})`);
       }
     });
 
     return missingItems;
+  };
+
+  // Check stock availability for a single item (returns boolean: is missing?)
+  const isItemMissing = (item: ExtendedOSItem) => {
+    if (!item.insumoId) return false;
+    const stockItem = insumos.find(i => i.id === item.insumoId);
+    if (!stockItem) return false;
+
+    let currentOrderUsage = 0;
+    if (initialData && initialData.status === OrderStatus.EMITTED) {
+        const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
+        if (initialItem) currentOrderUsage = initialItem.qtyTotal;
+    }
+
+    const realAvailable = stockItem.availableQty + currentOrderUsage;
+    return item.qtyTotal > (realAvailable + 0.001);
   };
 
   const handleNext = () => {
@@ -246,7 +262,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     // Verificar estoque antes de ir para o resumo
     const missing = checkStockAvailability();
     if (missing.length > 0) {
-      setStockWarning(`Estoque insuficiente para: ${missing.join(', ')}. A ordem será gerada como "Aguardando Produto".`);
+      setStockWarning(`Estoque insuficiente. A ordem será gerada como "Aguardando Produto" e não consumirá reserva.`);
     } else {
       setStockWarning(null);
     }
@@ -268,6 +284,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     if (missing.length > 0) {
       finalStatus = OrderStatus.AWAITING_PRODUCT;
     } else if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
+      // Se estava aguardando mas agora tem saldo, muda para EMITIDA
       finalStatus = OrderStatus.EMITTED;
     }
 
@@ -293,13 +310,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
   };
 
   const availableInsumos = useMemo(() => {
-    if (!formData.farmId) return []; // Se não tem fazenda, não mostra insumos
+    if (!formData.farmId) return [];
     
     const farmName = farms.find(f => f.id === formData.farmId)?.name;
     if (!farmName) return [];
 
-    // Filtra estritamente pelo nome da fazenda
-    // A comparação é feita normalizando para evitar erros de case/espaços
     return insumos.filter(i => 
       i.farm.trim().toLowerCase() === farmName.trim().toLowerCase()
     );
@@ -363,10 +378,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <div>
               <h3 className="text-lg font-black text-amber-800 uppercase tracking-tight">Atenção: Saldo Insuficiente</h3>
               <p className="text-xs font-bold text-amber-700 mt-1 uppercase tracking-wide leading-relaxed">
-                {stockWarning}
+                Alguns itens não possuem estoque suficiente.
               </p>
               <p className="text-[10px] font-black text-amber-600/70 mt-2 uppercase tracking-widest">
-                Esta ordem não reservará estoque até que os produtos entrem no sistema.
+                Esta ordem será salva como "Aguardando Produto".
               </p>
             </div>
           </div>
@@ -438,22 +453,29 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {items.filter(i => i.insumoId).map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-8 py-6">
-                          <p className="text-sm font-black text-slate-900 uppercase">{item.productName}</p>
-                        </td>
-                        <td className="px-8 py-6 text-center">
-                          <span className="text-xs font-bold text-slate-500">{item.dosePerHa} {item.unit}</span>
-                        </td>
-                        <td className="px-8 py-6 text-center bg-blue-50/30">
-                          <span className="text-sm font-black text-blue-700">{item.qtyPerTank.toFixed(2)} {item.unit}</span>
-                        </td>
-                        <td className="px-8 py-6 text-right">
-                          <span className="text-sm font-black text-emerald-600">{item.qtyTotal.toFixed(2)} {item.unit}</span>
-                        </td>
-                      </tr>
-                    ))}
+                    {items.filter(i => i.insumoId).map((item, idx) => {
+                      const isMissing = isItemMissing(item);
+                      return (
+                        <tr key={idx} className={`transition-colors ${isMissing ? 'bg-red-50 hover:bg-red-100/50' : 'hover:bg-slate-50/50'}`}>
+                          <td className="px-8 py-6">
+                            <div className="flex items-center gap-2">
+                              {isMissing && <AlertTriangle size={16} className="text-red-500" />}
+                              <p className={`text-sm font-black uppercase ${isMissing ? 'text-red-600' : 'text-slate-900'}`}>{item.productName}</p>
+                            </div>
+                            {isMissing && <p className="text-[9px] font-bold text-red-400 mt-1 uppercase tracking-wider">Estoque insuficiente</p>}
+                          </td>
+                          <td className="px-8 py-6 text-center">
+                            <span className="text-xs font-bold text-slate-500">{item.dosePerHa} {item.unit}</span>
+                          </td>
+                          <td className="px-8 py-6 text-center bg-blue-50/30">
+                            <span className="text-sm font-black text-blue-700">{item.qtyPerTank.toFixed(2)} {item.unit}</span>
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            <span className={`text-sm font-black ${isMissing ? 'text-red-600' : 'text-emerald-600'}`}>{item.qtyTotal.toFixed(2)} {item.unit}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
