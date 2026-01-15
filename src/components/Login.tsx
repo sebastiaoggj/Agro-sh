@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Lock, User, Loader2, ArrowRight, Fingerprint } from 'lucide-react';
+import { Lock, User, Loader2, ArrowRight, Fingerprint, Mail } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,7 +9,7 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sufixo padrão para converter ID em email válido para o sistema
+  // Sufixo padrão para IDs simplificados
   const DOMAIN_SUFFIX = '@agro.com';
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -17,9 +17,9 @@ const Login: React.FC = () => {
     setError(null);
     setLoading(true);
 
-    // Remove espaços e converte para minúsculas para gerar o email interno
+    // Se tiver @, assume que é e-mail completo. Se não, adiciona sufixo.
     const cleanUsername = username.trim().toLowerCase().replace(/\s/g, '');
-    const email = `${cleanUsername}${DOMAIN_SUFFIX}`;
+    const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}${DOMAIN_SUFFIX}`;
 
     try {
       if (isLogin) {
@@ -30,7 +30,7 @@ const Login: React.FC = () => {
         });
         if (error) throw error;
       } else {
-        // CADASTRO
+        // CADASTRO (apenas se permitido publicamente, senão deve ser via admin)
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -45,15 +45,15 @@ const Login: React.FC = () => {
         if (data.user && !data.session) {
           setError("Cadastro realizado! Aguarde a aprovação do administrador.");
         } else if (data.user) {
-          alert("ID registrado com sucesso!");
+          alert("Acesso registrado com sucesso!");
         }
       }
     } catch (err: any) {
       console.error(err);
       if (err.message.includes("Invalid login")) {
-        setError("ID ou senha incorretos.");
+        setError("E-mail/ID ou senha incorretos.");
       } else if (err.message.includes("already registered")) {
-        setError("Este ID já está em uso.");
+        setError("Este acesso já existe.");
       } else if (err.message.includes("Password should be")) {
         setError("A senha deve ter pelo menos 6 caracteres.");
       } else {
@@ -95,19 +95,19 @@ const Login: React.FC = () => {
             onClick={() => { setIsLogin(false); setError(null); }}
             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${!isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
           >
-            Criar ID
+            Solicitar Acesso
           </button>
         </div>
         
         <form onSubmit={handleAuth} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">ID de Acesso</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">E-mail ou ID de Acesso</label>
             <div className="relative group">
-              <Fingerprint className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
+              <Mail className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
               <input 
                 type="text" 
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-14 pr-6 py-4 text-slate-900 font-bold outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                placeholder="Ex: operador01"
+                placeholder="Ex: joao@empresa.com"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -147,7 +147,7 @@ const Login: React.FC = () => {
               <Loader2 className="animate-spin" size={20} />
             ) : (
               <>
-                {isLogin ? 'Entrar no Sistema' : 'Registrar Novo ID'}
+                {isLogin ? 'Entrar no Sistema' : 'Solicitar Registro'}
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </>
             )}

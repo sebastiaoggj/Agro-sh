@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Shield, Key, Check, X, 
-  RefreshCw, Lock, Unlock, UserCog, Fingerprint
+  RefreshCw, Lock, Unlock, UserCog, Fingerprint, Mail
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
@@ -25,7 +25,7 @@ const TeamManagement: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Form States
-  const [newUserId, setNewUserId] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newPasswordReset, setNewPasswordReset] = useState('');
@@ -46,7 +46,6 @@ const TeamManagement: React.FC = () => {
     setLoading(true);
     const { data: { session } } = await supabase.auth.getSession();
     
-    // Se estiver em modo demo (sem sessão), retorna lista vazia ou fictícia
     if (!session) {
       setUsers([
         { 
@@ -96,21 +95,23 @@ const TeamManagement: React.FC = () => {
   };
 
   const handleCreateUser = async () => {
-    if (!newUserId || !newUserPassword || !newUserName) {
+    if (!newUserEmail || !newUserPassword || !newUserName) {
       alert("Preencha todos os campos.");
       return;
     }
 
-    // Gerar email interno
-    const cleanId = newUserId.trim().toLowerCase().replace(/\s/g, '');
-    const email = `${cleanId}${DOMAIN_SUFFIX}`;
+    // Se o usuário digitou um email completo (com @), usa ele. 
+    // Se digitou apenas um ID (ex: joao), adiciona o sufixo padrão.
+    let email = newUserEmail.trim().toLowerCase().replace(/\s/g, '');
+    if (!email.includes('@')) {
+      email = `${email}${DOMAIN_SUFFIX}`;
+    }
 
     setActionLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        // Simulação para modo demo
         setTimeout(() => {
           alert("Modo Demonstração: Usuário criado virtualmente.");
           setUsers([...users, {
@@ -124,7 +125,7 @@ const TeamManagement: React.FC = () => {
             created_at: new Date().toISOString()
           }]);
           setIsModalOpen(false);
-          setNewUserId('');
+          setNewUserEmail('');
           setNewUserPassword('');
           setNewUserName('');
           setActionLoading(false);
@@ -155,9 +156,9 @@ const TeamManagement: React.FC = () => {
       
       if (!response.ok) throw new Error(result.error);
 
-      alert("ID de usuário criado com sucesso!");
+      alert("Usuário criado com sucesso!");
       setIsModalOpen(false);
-      setNewUserId('');
+      setNewUserEmail('');
       setNewUserPassword('');
       setNewUserName('');
       setPerms({ users: false, inputs: false, machines: false });
@@ -215,9 +216,8 @@ const TeamManagement: React.FC = () => {
     }
   };
 
-  // Helper para exibir apenas o ID (sem @agro.com)
   const formatDisplayId = (email: string) => {
-    return email.split('@')[0];
+    return email.includes('@agro.com') ? email.split('@')[0] : email;
   };
 
   return (
@@ -232,7 +232,7 @@ const TeamManagement: React.FC = () => {
           onClick={() => setIsModalOpen(true)}
           className="bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-[2rem] flex items-center gap-3 font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-slate-900/20 active:scale-95"
         >
-          <UserPlus size={18} strokeWidth={3} /> NOVO ID
+          <UserPlus size={18} strokeWidth={3} /> NOVO PERFIL
         </button>
       </div>
 
@@ -250,8 +250,8 @@ const TeamManagement: React.FC = () => {
                 <div>
                   <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{user.full_name || 'Sem Nome'}</h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <Fingerprint size={12} className="text-slate-400" />
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">{formatDisplayId(user.email)}</p>
+                    <Mail size={12} className="text-slate-400" />
+                    <p className="text-slate-500 text-xs font-bold tracking-wider">{formatDisplayId(user.email)}</p>
                   </div>
                   <span className={`inline-block mt-2 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${user.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
                     {user.role === 'admin' ? 'Administrador Master' : 'Operador'}
@@ -310,14 +310,21 @@ const TeamManagement: React.FC = () => {
             </div>
             
             <div className="space-y-4">
-              <input type="text" placeholder="Nome Completo" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserName} onChange={e => setNewUserName(e.target.value)} />
-              <div className="relative">
-                <input type="text" placeholder="ID de Acesso (Ex: joao.silva)" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserId} onChange={e => setNewUserId(e.target.value)} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Nome Completo</label>
+                <input type="text" placeholder="EX: JOÃO SILVA" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900 uppercase" value={newUserName} onChange={e => setNewUserName(e.target.value)} />
               </div>
-              <input type="password" placeholder="Senha Inicial" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} />
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">E-mail ou ID de Acesso</label>
+                <input type="text" placeholder="joao@empresa.com ou joao.silva" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Senha Inicial</label>
+                <input type="password" placeholder="••••••••" className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-slate-900" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} />
+              </div>
               
               <div className="pt-4 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Permissões Iniciais</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Permissões de Edição</p>
                 <div className="flex gap-3">
                   <button onClick={() => setPerms({...perms, inputs: !perms.inputs})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${perms.inputs ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>Insumos</button>
                   <button onClick={() => setPerms({...perms, machines: !perms.machines})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${perms.machines ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>Máquinas</button>
@@ -329,9 +336,9 @@ const TeamManagement: React.FC = () => {
             <button 
               onClick={handleCreateUser} 
               disabled={actionLoading}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/20 disabled:opacity-50"
+              className="w-full bg-slate-900 hover:bg-black text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-slate-900/20 disabled:opacity-50"
             >
-              {actionLoading ? 'Criando ID...' : 'Criar ID de Acesso'}
+              {actionLoading ? 'Processando...' : 'Cadastrar Membro'}
             </button>
           </div>
         </div>
