@@ -273,7 +273,87 @@ const App: React.FC = () => {
     fetchAllData();
   }, [session]);
 
-  const triggerAutoRelease = async () => { /* Lógica existente */ };
+  const triggerAutoRelease = async () => {
+    console.log("Iniciando verificação automática de estoque...");
+    try {
+      // 1. Buscar ordens com status "Aguardando Produto", ordenadas por antiguidade
+      const { data: waitingOrders, error: orderError } = await supabase
+        .from('service_orders')
+        .select('*')
+        .eq('status', OrderStatus.AWAITING_PRODUCT)
+        .order('created_at', { ascending: true });
+
+      if (orderError) throw orderError;
+      if (!waitingOrders || waitingOrders.length === 0) return;
+
+      // 2. Buscar inventário atual
+      const { data: currentInventory, error: invError } = await supabase
+        .from('inventory')
+        .select('*');
+
+      if (invError) throw invError;
+      if (!currentInventory) return;
+
+      // Criar mapa de estoque disponível temporário para simular o consumo sequencial
+      const tempStockMap = new Map<string, number>();
+      currentInventory.forEach((item: any) => {
+        // Disponível = Físico - Reservado
+        const available = Number(item.physical_stock) - Number(item.reserved_qty);
+        tempStockMap.set(item.id, available);
+      });
+
+      const ordersToRelease: string[] = [];
+
+      // 3. Verificar cada ordem
+      for (const order of waitingOrders) {
+        let canRelease = true;
+        
+        if (!order.items || !Array.isArray(order.items)) continue;
+
+        // Verifica todos os itens da ordem
+        for (const item of order.items) {
+          // item.insumoId refere-se ao ID da tabela inventory (confirmado no OrderForm)
+          const currentStock = tempStockMap.get(item.insumoId) || 0;
+          
+          // Se precisar de mais do que tem disponível, não libera a ordem
+          if (Number(item.qtyTotal) > currentStock) {
+            canRelease = false;
+            break; 
+          }
+        }
+
+        // Se todos os itens têm saldo
+        if (canRelease) {
+          ordersToRelease.push(order.id);
+          
+          // Deduzir virtualmente do mapa para que a próxima ordem da fila
+          // não conte com esse estoque que acabamos de "comprometer"
+          order.items.forEach((item: any) => {
+             const prev = tempStockMap.get(item.insumoId) || 0;
+             tempStockMap.set(item.insumoId, prev - Number(item.qtyTotal));
+          });
+        }
+      }
+
+      // 4. Atualizar as ordens liberadas
+      if (ordersToRelease.length > 0) {
+        const { error: updateError } = await supabase
+          .from('service_orders')
+          .update({ status: OrderStatus.EMITTED })
+          .in('id', ordersToRelease);
+
+        if (updateError) throw updateError;
+
+        // O trigger do banco cuidará de atualizar o reserved_qty automaticamente
+        // mas vamos forçar um refresh dos dados na tela
+        alert(`${ordersToRelease.length} Ordem(ns) liberada(s) automaticamente! Estoque suficiente detectado.`);
+        await fetchAllData();
+      }
+
+    } catch (err) {
+      console.error("Erro na liberação automática:", err);
+    }
+  };
 
   const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
     const userId = session?.user?.id || offlineUserId;
@@ -441,10 +521,12 @@ const App: React.FC = () => {
        const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
        if (error) throw error;
        
-       fetchAllData();
+       await fetchAllData();
        
        if (status === PurchaseOrderStatus.RECEIVED) {
          alert("Recebimento confirmado e estoque atualizado!");
+         // Tenta liberar ordens travadas agora que temos estoque
+         await triggerAutoRelease();
        }
     } catch(e: any) { 
        console.error(e);
@@ -465,7 +547,10 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
-  const handleRefresh = () => { fetchAllData(); };
+  const handleRefresh = async () => { 
+    await fetchAllData(); 
+    await triggerAutoRelease(); // Força verificação ao clicar em atualizar
+  };
 
   // Garante que effectiveProfile nunca seja null para evitar crashes
   const effectiveProfile = userProfile || {
