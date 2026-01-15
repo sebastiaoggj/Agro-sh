@@ -56,7 +56,12 @@ const OrderForm: React.FC<OrderFormProps> = ({
     id: initialData?.id || '',
     farmId: initialData?.farmId || '',
     fieldIds: initialData?.fieldIds || (initialData?.fieldNames ? [] : []), 
-    orderNumber: initialData?.orderNumber || '',
+    // Geração automática do número da ordem
+    orderNumber: initialData?.orderNumber || (() => {
+      const year = new Date().getFullYear();
+      const count = (existingOrders?.length || 0) + 1;
+      return `${year}${count.toString().padStart(3, '0')}`;
+    })(),
     culture: initialData?.culture || '',
     variety: initialData?.variety || '',
     recommendationDate: initialData?.recommendationDate || new Date().toISOString().split('T')[0],
@@ -207,13 +212,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const stockItem = insumos.find(i => i.id === item.insumoId);
       if (!stockItem) return;
 
-      // Se estamos editando uma ordem já EMITIDA, precisamos "devolver" a quantidade dela ao saldo disponível para testar
-      // Porém, para simplificar e garantir segurança, verificamos apenas o disponível atual.
-      // Se Available < Needed, falta produto.
-      
-      // Lógica aprimorada: 
-      // Se a ordem atual JÁ ESTÁ emitida, sua quantidade já foi descontada do Available.
-      // Então RealAvailable = Available + (QuantidadeDestaOrdemSeEmitida).
+      // Lógica de saldo: Considera o estoque disponível atual.
+      // Se for edição de ordem já emitida, o ideal seria "devolver" virtualmente o saldo para recalcular,
+      // mas para segurança, usamos o disponível atual + o consumo desta ordem se ela já estiver emitida.
       let currentOrderUsage = 0;
       if (initialData && initialData.status === OrderStatus.EMITTED) {
          const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
@@ -265,14 +266,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
     if (missing.length > 0) {
       finalStatus = OrderStatus.AWAITING_PRODUCT;
     } else if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
-      // Se estava aguardando produto mas agora tem saldo, sugerimos Emitir (ou o usuário pode ter trocado manualmente)
-      // Mantemos o que o usuário escolheu no form (que padroniza para Emitted)
+      // Se estava aguardando mas agora tem saldo, sugerimos Emitir (padrão do form)
       finalStatus = OrderStatus.EMITTED;
     }
 
     const finalOrder: ServiceOrder = {
       ...formData,
-      status: finalStatus, // Aplica o status corrigido
+      status: finalStatus,
       id: formData.id || Date.now().toString(),
       farmName: selectedFarm?.name || '',
       fieldNames: selectedFields.map(f => f.name),
