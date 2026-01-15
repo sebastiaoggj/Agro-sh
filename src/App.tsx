@@ -279,9 +279,6 @@ const App: React.FC = () => {
     const userId = session?.user?.id || offlineUserId;
     try {
       const validItems = order.items.filter(i => i.insumoId && i.insumoId !== '');
-      
-      // FIX: Removida a lógica que forçava o status para EMITTED.
-      // Agora respeitamos o status vindo do OrderForm, que pode ser AWAITING_PRODUCT se faltar estoque.
       let finalStatus = order.status;
 
       const toNullable = (val: string | undefined) => (!val || val.trim() === '') ? null : val;
@@ -384,10 +381,75 @@ const App: React.FC = () => {
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
     try {
+       // 1. Lógica de Recebimento de Estoque
+       if (status === PurchaseOrderStatus.RECEIVED) {
+          const { data: po, error: poError } = await supabase
+            .from('purchase_orders')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          if (poError || !po) throw new Error("Pedido não encontrado");
+
+          if (po.status === PurchaseOrderStatus.RECEIVED) {
+             alert("Este pedido já foi recebido anteriormente.");
+             return;
+          }
+
+          // Busca item no inventário (Chave: Insumo + Fazenda)
+          const { data: existingInv } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('master_insumo_id', po.master_insumo_id)
+            .eq('farm_id', po.farm_id)
+            .single();
+
+          let inventoryId = existingInv?.id;
+
+          if (existingInv) {
+             // Atualiza existente
+             await supabase.from('inventory').update({
+                physical_stock: Number(existingInv.physical_stock) + Number(po.quantity)
+             }).eq('id', existingInv.id);
+          } else {
+             // Cria novo registro
+             const { data: newInv, error: invError } = await supabase.from('inventory').insert({
+                master_insumo_id: po.master_insumo_id,
+                farm_id: po.farm_id,
+                physical_stock: Number(po.quantity),
+                reserved_qty: 0,
+                min_stock: 0,
+                user_id: session?.user?.id || offlineUserId
+             }).select().single();
+             
+             if (invError) throw invError;
+             inventoryId = newInv.id;
+          }
+
+          // Grava Histórico
+          await supabase.from('stock_history').insert({
+             inventory_id: inventoryId,
+             type: 'ENTRADA',
+             description: `Recebimento Pedido #${po.order_number} (NF: ${extraData.invoice_number || 'N/A'})`,
+             quantity: Number(po.quantity),
+             user_name: userProfile?.full_name || 'Sistema',
+             user_id: session?.user?.id || offlineUserId
+          });
+       }
+
+       // 2. Atualiza status do pedido
        const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
        if (error) throw error;
+       
        fetchAllData();
-    } catch(e) { alert("Erro ao atualizar."); }
+       
+       if (status === PurchaseOrderStatus.RECEIVED) {
+         alert("Recebimento confirmado e estoque atualizado!");
+       }
+    } catch(e: any) { 
+       console.error(e);
+       alert("Erro ao atualizar: " + e.message); 
+    }
   };
 
   const handleDeletePO = async (id: string) => {
