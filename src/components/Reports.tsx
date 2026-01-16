@@ -18,7 +18,8 @@ import {
   Edit,
   Trash2,
   X,
-  DollarSign
+  DollarSign,
+  CalendarRange
 } from 'lucide-react';
 import { OrderStatus, ServiceOrder, Insumo, Harvest } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -137,12 +138,9 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       if (selectedHarvestId !== 'all') {
         const harvest = harvests.find(h => h.id === selectedHarvestId);
         if (harvest) {
-          // Use recommendation date as primary, fallback to created (from object ID or assume now if draft)
-          // For simplicity in this demo, let's assume `recommendationDate` is required for reports
-          const orderDate = o.recommendationDate ? new Date(o.recommendationDate) : new Date(); // Fallback
+          const orderDate = o.recommendationDate ? new Date(o.recommendationDate) : new Date(); 
           const start = new Date(harvest.startDate);
           const end = new Date(harvest.endDate);
-          // Set end date to end of day
           end.setHours(23, 59, 59, 999);
           
           matchesHarvest = orderDate >= start && orderDate <= end;
@@ -152,6 +150,19 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       return matchesText && matchesHarvest;
     });
   }, [orders, searchTerm, selectedHarvestId, harvests]);
+
+  // Identify harvest for a specific order based on date
+  const getOrderHarvest = (dateStr?: string) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    const harvest = harvests.find(h => {
+      const start = new Date(h.startDate);
+      const end = new Date(h.endDate);
+      end.setHours(23, 59, 59, 999);
+      return date >= start && date <= end;
+    });
+    return harvest ? harvest.name : 'FORA DE SAFRA';
+  };
 
   // Métricas calculadas com base nos dados FILTRADOS
   const totalArea = filteredOrders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
@@ -282,6 +293,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                   <th className="px-6 py-8">Fazenda / Talhão</th>
                   <th className="px-6 py-8"># / Área</th>
                   <th className="px-6 py-8">Cultura</th>
+                  <th className="px-6 py-8">Safra</th>
                   <th className="px-6 py-8">Volume Calda</th>
                   <th className="px-6 py-8">Custo Material</th>
                   <th className="px-6 py-8">Status Atual</th>
@@ -318,6 +330,12 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                         </td>
                         <td className="px-6 py-8">
                           <span className="text-xs font-black text-slate-900 uppercase tracking-widest">{order.culture}</span>
+                        </td>
+                        <td className="px-6 py-8">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest whitespace-nowrap">
+                            <CalendarRange size={12} className="text-slate-300" />
+                            {getOrderHarvest(order.recommendationDate)}
+                          </span>
                         </td>
                         <td className="px-6 py-8">
                           <div className="flex flex-col">
@@ -384,7 +402,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                   })
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
+                    <td colSpan={9} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
                       Nenhuma ordem encontrada nesta safra
                     </td>
                   </tr>
