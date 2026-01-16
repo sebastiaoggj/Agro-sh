@@ -26,6 +26,14 @@ export interface Farm {
   name: string;
 }
 
+export interface Harvest {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+}
+
 export interface Field {
   id: string;
   farmId: string;

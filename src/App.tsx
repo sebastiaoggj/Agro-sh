@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, ClipboardList, Package, Truck, 
   Map as MapIcon, Calendar, Sprout, ShoppingCart, 
-  Beaker, LogOut, RefreshCw, BarChart3, Users
+  Beaker, LogOut, RefreshCw, BarChart3, Users,
+  CalendarRange
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './integrations/supabase/client';
@@ -18,6 +19,7 @@ import StatsView from './components/StatsView';
 import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import TeamManagement from './components/TeamManagement';
+import HarvestManagement from './components/HarvestManagement';
 
 import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus } from './types';
 
@@ -666,6 +668,11 @@ const App: React.FC = () => {
         
         case 'reports': return <div className="p-12 h-full"><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></div>;
         
+        case 'harvests':
+          return effectiveProfile?.role === 'admin' ? (
+            <div className="p-12 h-full"><HarvestManagement /></div>
+          ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
+
         case 'team':
           return effectiveProfile?.can_manage_users ? (
             <div className="p-12 h-full"><TeamManagement /></div>
@@ -691,6 +698,7 @@ const App: React.FC = () => {
       { id: 'fleet', label: 'Frota', icon: Truck },
       { id: 'areas', label: 'Áreas', icon: MapIcon }
     ] : []),
+    ...(effectiveProfile?.role === 'admin' ? [{ id: 'harvests', label: 'Safras', icon: CalendarRange }] : []),
     ...(effectiveProfile?.can_manage_users ? [{ id: 'team', label: 'Equipe', icon: Users }] : []),
   ];
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Download, 
   CheckCircle2, 
@@ -20,8 +20,9 @@ import {
   X,
   DollarSign
 } from 'lucide-react';
-import { OrderStatus, ServiceOrder, Insumo } from '../types';
+import { OrderStatus, ServiceOrder, Insumo, Harvest } from '../types';
 import OSPrintLayout from './OSPrintLayout';
+import { supabase } from '../integrations/supabase/client';
 
 interface ReportsProps {
   orders: ServiceOrder[];
@@ -97,28 +98,71 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<ServiceOrder | null>(null);
+  
+  // Harvest States
+  const [harvests, setHarvests] = useState<Harvest[]>([]);
+  const [selectedHarvestId, setSelectedHarvestId] = useState<string>('all');
 
-  // Métricas calculadas com base nos dados reais
-  const totalArea = orders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
-  const totalVolume = orders.reduce((acc, order) => acc + (order.totalVolume || 0), 0);
-  const completedCount = orders.filter(o => o.status === OrderStatus.COMPLETED).length;
-  const inProgressCount = orders.filter(o => o.status === OrderStatus.IN_PROGRESS).length;
-  const reworkCount = orders.filter(o => o.status === OrderStatus.REWORK || o.status === OrderStatus.LATE).length;
+  useEffect(() => {
+    const fetchHarvests = async () => {
+      const { data } = await supabase.from('harvests').select('*').order('start_date', { ascending: false });
+      if (data) {
+        const mapped = data.map(h => ({
+          id: h.id,
+          name: h.name,
+          startDate: h.start_date,
+          endDate: h.end_date,
+          isActive: h.is_active
+        }));
+        setHarvests(mapped);
+        
+        // Auto-select active harvest if available
+        const active = mapped.find(h => h.isActive);
+        if (active) setSelectedHarvestId(active.id);
+      }
+    };
+    fetchHarvests();
+  }, []);
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => 
-      o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.farmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.culture.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [orders, searchTerm]);
+    return orders.filter(o => {
+      // 1. Text Search
+      const matchesText = 
+        o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        o.farmName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        o.culture.toLowerCase().includes(searchTerm.toLowerCase());
 
-  // Helper para calcular custo total da OS
+      // 2. Harvest Filter (Date Range)
+      let matchesHarvest = true;
+      if (selectedHarvestId !== 'all') {
+        const harvest = harvests.find(h => h.id === selectedHarvestId);
+        if (harvest) {
+          // Use recommendation date as primary, fallback to created (from object ID or assume now if draft)
+          // For simplicity in this demo, let's assume `recommendationDate` is required for reports
+          const orderDate = o.recommendationDate ? new Date(o.recommendationDate) : new Date(); // Fallback
+          const start = new Date(harvest.startDate);
+          const end = new Date(harvest.endDate);
+          // Set end date to end of day
+          end.setHours(23, 59, 59, 999);
+          
+          matchesHarvest = orderDate >= start && orderDate <= end;
+        }
+      }
+
+      return matchesText && matchesHarvest;
+    });
+  }, [orders, searchTerm, selectedHarvestId, harvests]);
+
+  // Métricas calculadas com base nos dados FILTRADOS
+  const totalArea = filteredOrders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
+  const totalVolume = filteredOrders.reduce((acc, order) => acc + (order.totalVolume || 0), 0);
+  const completedCount = filteredOrders.filter(o => o.status === OrderStatus.COMPLETED).length;
+  const reworkCount = filteredOrders.filter(o => o.status === OrderStatus.REWORK || o.status === OrderStatus.LATE).length;
+
   const calculateTotalCost = (order: ServiceOrder) => {
     if (!order.items || order.items.length === 0) return 0;
     
     return order.items.reduce((total, item) => {
-      // Encontra o item no inventário para pegar o preço atual
       const stockItem = inventory.find(inv => inv.id === item.insumoId);
       const price = stockItem?.price || 0;
       return total + (item.qtyTotal * price);
@@ -168,14 +212,14 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
         {/* Summary Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <MetricCard 
-            title="Área Total Planejada" 
+            title="Área Consolidada" 
             value={totalArea.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} 
             unit="Hectares" 
             icon={Hash} 
             color="bg-emerald-600" 
           />
           <MetricCard 
-            title="Volume de Calda" 
+            title="Volume Aplicado" 
             value={(totalVolume / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} 
             unit="Mil Litros" 
             icon={Droplets} 
@@ -209,17 +253,23 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div className="relative group">
-            <select className="bg-white border border-slate-200 rounded-2xl pl-6 pr-14 py-4 text-[10px] font-black text-slate-600 outline-none appearance-none cursor-pointer shadow-sm uppercase tracking-widest">
-              <option>Todas as Fazendas</option>
+          
+          {/* Harvest Filter */}
+          <div className="relative group min-w-[200px]">
+            <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <select 
+              className="w-full bg-white border border-slate-200 rounded-2xl pl-14 pr-14 py-4 text-[10px] font-black text-slate-600 outline-none appearance-none cursor-pointer shadow-sm uppercase tracking-widest focus:ring-2 focus:ring-emerald-500 transition-all"
+              value={selectedHarvestId}
+              onChange={(e) => setSelectedHarvestId(e.target.value)}
+            >
+              <option value="all">TODAS AS SAFRAS</option>
+              {harvests.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.name} {h.isActive ? '(VIGENTE)' : ''}
+                </option>
+              ))}
             </select>
-            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          </div>
-          <div className="relative group">
-            <select className="bg-white border border-slate-200 rounded-2xl pl-6 pr-14 py-4 text-[10px] font-black text-slate-600 outline-none appearance-none cursor-pointer shadow-sm uppercase tracking-widest">
-              <option>Safra 2025/26</option>
-            </select>
-            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
           </div>
         </div>
 
@@ -335,7 +385,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                 ) : (
                   <tr>
                     <td colSpan={8} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
-                      Nenhuma ordem encontrada
+                      Nenhuma ordem encontrada nesta safra
                     </td>
                   </tr>
                 )}
@@ -343,15 +393,11 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
             </table>
           </div>
           
-          {/* Table Footer / Pagination */}
+          {/* Table Footer */}
           <div className="p-10 border-t border-slate-50 bg-slate-50/30 flex justify-between items-center">
              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
-               EXIBINDO {filteredOrders.length} DE {orders.length} ORDENS
+               EXIBINDO {filteredOrders.length} REGISTROS
              </span>
-             <div className="flex gap-4">
-                <button disabled className="px-10 py-4 text-[10px] font-black uppercase tracking-widest text-slate-300 cursor-not-allowed">ANTERIOR</button>
-                <button disabled className="px-10 py-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-300 cursor-not-allowed shadow-sm">PRÓXIMA</button>
-             </div>
           </div>
         </div>
       </div>
