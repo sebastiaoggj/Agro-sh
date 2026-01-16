@@ -21,7 +21,7 @@ import InsumoMaster from './components/InsumoMaster';
 import TeamManagement from './components/TeamManagement';
 import HarvestManagement from './components/HarvestManagement';
 
-import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus } from './types';
+import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus, OperationType } from './types';
 
 // Interface do Perfil de Usuário
 interface UserProfile {
@@ -216,6 +216,7 @@ const App: React.FC = () => {
           variety: o.variety,
           recommendationDate: o.recommendation_date,
           maxApplicationDate: o.max_application_date,
+          operationType: (o.operation_type as OperationType) || 'PULVERIZACAO',
           machineType: o.machine_type,
           machineId: o.machine_id,
           machineName: o.machine_name || '',
@@ -375,6 +376,7 @@ const App: React.FC = () => {
         variety: order.variety,
         recommendation_date: toNullable(order.recommendationDate),
         max_application_date: toNullable(order.maxApplicationDate),
+        operation_type: order.operationType,
         machine_type: order.machineType,
         machine_id: toNullable(order.machineId),
         machine_name: order.machineName,

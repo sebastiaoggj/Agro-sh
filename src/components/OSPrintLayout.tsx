@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Sprout, MapPin, Calendar, Tractor, User, 
   Droplets, Gauge, Wind, AlertTriangle, 
-  Info, Hash, AlertCircle
+  Info, Hash, AlertCircle, Layers
 } from 'lucide-react';
 import { ServiceOrder } from '../types';
 
@@ -13,17 +13,46 @@ interface OSPrintLayoutProps {
 const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
   if (!order) return null;
 
+  const opType = order.operationType || 'PULVERIZACAO';
+
+  // Labels dinâmicos
+  const getLabels = () => {
+    switch (opType) {
+      case 'PLANTIO': return {
+        title: 'Ordem de Plantio',
+        flowLabel: 'População',
+        flowUnit: 'sem/ha',
+        capUnit: 'Kg',
+        configLabel: 'Espaçamento'
+      };
+      case 'ADUBACAO': return {
+        title: 'Ordem de Adubação',
+        flowLabel: 'Dosagem',
+        flowUnit: 'Kg/ha',
+        capUnit: 'Kg',
+        configLabel: 'Faixa'
+      };
+      default: return {
+        title: 'Ordem de Pulverização',
+        flowLabel: 'Vazão',
+        flowUnit: 'L/ha',
+        capUnit: 'L',
+        configLabel: 'Bico/Pressão'
+      };
+    }
+  };
+
+  const labels = getLabels();
+
   // Cálculos seguros para o layout
   const totalVolume = order.totalVolume || 0;
-  const tankCapacity = order.tankCapacity || 1; // Evita divisão por zero
+  const tankCapacity = order.tankCapacity || 1; 
   
-  // Recalcula para exibição
   const numberOfTanksExact = totalVolume / tankCapacity;
   const numberOfTanksFull = Math.floor(numberOfTanksExact);
   const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
   const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCapacity) : 0;
   
-  // Lista de itens segura
   const items = order.items || [];
 
   return (
@@ -45,7 +74,7 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           </div>
         </div>
         <div className="text-right">
-          <h2 className="text-base font-black uppercase tracking-widest text-slate-900">Ordem de Aplicação</h2>
+          <h2 className="text-base font-black uppercase tracking-widest text-slate-900">{labels.title}</h2>
           <p className="text-sm font-bold text-slate-600">Nº {order.orderNumber || '---'}</p>
         </div>
       </div>
@@ -117,17 +146,19 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Droplets size={12} className="text-slate-400" />
+              <Layers size={12} className="text-slate-400" />
               <div className="flex-1 flex justify-between">
-                <span className="text-[8px] font-bold text-slate-500 uppercase">Tanque:</span>
-                <span className="text-[9px] font-black uppercase text-slate-900">{order.tankCapacity} L</span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase">Capacidade:</span>
+                <span className="text-[9px] font-black uppercase text-slate-900">{order.tankCapacity} {labels.capUnit}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <Gauge size={12} className="text-slate-400" />
               <div className="flex-1 flex justify-between">
-                <span className="text-[8px] font-bold text-slate-500 uppercase">Config:</span>
-                <span className="text-[9px] font-black uppercase text-slate-900">{order.pressure || '-'} / {order.nozzle || '-'}</span>
+                <span className="text-[8px] font-bold text-slate-500 uppercase">{labels.configLabel}:</span>
+                <span className="text-[9px] font-black uppercase text-slate-900">
+                  {opType === 'PULVERIZACAO' ? `${order.pressure} / ${order.nozzle}` : order.pressure}
+                </span>
               </div>
             </div>
           </div>
@@ -139,9 +170,9 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
         <div className="border border-slate-200 border-l-2 border-l-emerald-500 rounded p-1.5 shadow-sm">
           <div className="flex items-center gap-1 mb-0.5">
             <Droplets size={10} className="text-slate-400" />
-            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Vazão L/ha</span>
+            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">{labels.flowLabel}</span>
           </div>
-          <p className="text-sm font-black text-slate-900">{order.flowRate || 0}</p>
+          <p className="text-sm font-black text-slate-900">{order.flowRate || 0} {labels.flowUnit}</p>
         </div>
         <div className="border border-slate-200 border-l-2 border-l-blue-500 rounded p-1.5 shadow-sm">
           <div className="flex items-center gap-1 mb-0.5">
@@ -153,30 +184,30 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
         <div className="border border-slate-200 border-l-2 border-l-orange-500 rounded p-1.5 shadow-sm">
           <div className="flex items-center gap-1 mb-0.5">
             <Hash size={10} className="text-slate-400" />
-            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Tanques</span>
+            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Cargas</span>
           </div>
           <p className="text-sm font-black text-slate-900">{numberOfTanksFull}</p>
         </div>
         <div className="border border-slate-200 border-l-2 border-l-indigo-500 rounded p-1.5 shadow-sm">
           <div className="flex items-center gap-1 mb-0.5">
-            <Droplets size={10} className="text-slate-400" />
-            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Calda Total</span>
+            <Layers size={10} className="text-slate-400" />
+            <span className="text-[7px] font-black uppercase tracking-widest text-slate-500">Total</span>
           </div>
-          <p className="text-sm font-black text-slate-900">{totalVolume.toLocaleString('pt-BR')} <span className="text-[8px] ml-0.5 text-slate-400">L</span></p>
+          <p className="text-sm font-black text-slate-900">{totalVolume.toLocaleString('pt-BR')} <span className="text-[8px] ml-0.5 text-slate-400">{labels.capUnit}</span></p>
         </div>
       </div>
 
       {/* Dosage Table - Full Tank - Compacto */}
       <div className="mb-2 border border-slate-800 rounded-lg overflow-hidden break-inside-avoid">
         <div className="bg-emerald-100 py-1 px-2 border-b border-emerald-200 print-color-adjust-exact">
-           <span className="text-[8px] font-black uppercase tracking-widest text-emerald-900">Receituário: Tanque Cheio ({order.tankCapacity} L)</span>
+           <span className="text-[8px] font-black uppercase tracking-widest text-emerald-900">Composição: Carga Cheia ({order.tankCapacity} {labels.capUnit})</span>
         </div>
         <table className="w-full text-left">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-[8px] uppercase font-black tracking-widest text-slate-500 print-color-adjust-exact">
               <th className="px-2 py-1">Produto</th>
               <th className="px-2 py-1 text-center">Dose/ha</th>
-              <th className="px-2 py-1 text-right">Qtd. Tanque</th>
+              <th className="px-2 py-1 text-right">Qtd. Carga</th>
               <th className="px-2 py-1 text-right">Total</th>
             </tr>
           </thead>
@@ -199,9 +230,9 @@ const OSPrintLayout: React.FC<OSPrintLayoutProps> = ({ order }) => {
           <div className="bg-amber-100 py-1 px-2 border-b border-amber-200 flex items-center justify-between print-color-adjust-exact">
              <div className="flex items-center gap-1">
                <AlertCircle size={10} className="text-amber-700" />
-               <span className="text-[8px] font-black uppercase tracking-widest text-amber-900">Último Tanque (Parcial)</span>
+               <span className="text-[8px] font-black uppercase tracking-widest text-amber-900">Última Carga (Parcial)</span>
              </div>
-             <span className="text-[8px] font-black uppercase tracking-widest text-amber-900">Vol: {partialTankVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L</span>
+             <span className="text-[8px] font-black uppercase tracking-widest text-amber-900">Vol: {partialTankVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} {labels.capUnit}</span>
           </div>
           <table className="w-full text-left">
             <thead>

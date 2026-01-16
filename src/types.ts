@@ -11,6 +11,8 @@ export enum OrderStatus {
   LATE = 'Atrasada'
 }
 
+export type OperationType = 'PULVERIZACAO' | 'PLANTIO' | 'ADUBACAO';
+
 export enum PurchaseOrderStatus {
   PENDING = 'Aguardando',
   APPROVED = 'Aprovado',
@@ -99,21 +101,30 @@ export interface ServiceOrder {
   variety: string;
   recommendationDate: string;
   maxApplicationDate: string;
+  
+  // Novo campo
+  operationType: OperationType;
+
   machineType: string;
   machineId: string;
   machineName: string;
   operatorId: string;
-  tankCapacity: number;
-  flowRate: number;
-  nozzle: string;
-  pressure: string;
+  
+  // Capacidade pode ser L (Tanque) ou KG (Caixa de Semente/Adubo)
+  tankCapacity: number; 
+  // Vazão pode ser L/ha, Kg/ha ou Sementes/m
+  flowRate: number; 
+  
+  nozzle: string;   // Para Plantio vira "Disco/Anel"
+  pressure: string; // Para Plantio vira "Espaçamento"
   speed: string;
+  
   applicationType: string;
   mandatoryPhrase: string;
   items: OSItem[];
   status: OrderStatus;
   totalArea: number;
-  totalVolume: number;
+  totalVolume: number; // Agora pode representar Total KG
   observations?: string;
 }
 
@@ -122,9 +133,9 @@ export interface PurchaseOrder {
   orderNumber: string;
   supplier: string;
   productName: string;
-  masterInsumoId?: string; // Novo campo
+  masterInsumoId?: string;
   farmName: string;
-  farmId?: string; // Novo campo
+  farmId?: string;
   quantity: number;
   unit: string;
   totalValue: number;

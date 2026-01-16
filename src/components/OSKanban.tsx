@@ -24,7 +24,7 @@ import {
   Undo2,
   ShoppingCart
 } from 'lucide-react';
-import { ServiceOrder, OrderStatus } from '../types';
+import { ServiceOrder, OrderStatus, OperationType } from '../types';
 
 interface OSCardProps {
   order: ServiceOrder;
@@ -46,6 +46,25 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
     }
   };
 
+  const getTypeIcon = (type: OperationType) => {
+    switch (type) {
+      case 'PLANTIO': return <Sprout size={18} strokeWidth={2.5} />;
+      case 'ADUBACAO': return <Layers size={18} strokeWidth={2.5} />;
+      default: return <Droplets size={18} strokeWidth={2.5} />;
+    }
+  };
+
+  const getTypeName = (type: OperationType) => {
+    switch (type) {
+      case 'PLANTIO': return 'PLANTIO';
+      case 'ADUBACAO': return 'ADUBAÇÃO';
+      default: return 'PULVERIZAÇÃO'; // Fallback
+    }
+  };
+
+  // Safe check for type since DB might have nulls for old records
+  const opType = order.operationType || 'PULVERIZACAO';
+
   return (
     <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-5 group relative overflow-hidden text-slate-900">
       <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-16 -mt-16 -z-10 group-hover:scale-110 transition-transform" />
@@ -62,7 +81,7 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Tractor size={16} className="text-slate-400" />
-            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight">{order.machineType}</span>
+            <span className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate">{order.machineType || 'Máquina'}</span>
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-red-500">
@@ -98,10 +117,10 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
         </div>
       </div>
       <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-blue-50 text-blue-500 rounded-2xl border border-blue-100">
-          <Droplets size={18} strokeWidth={2.5} />
+        <div className={`p-2.5 rounded-2xl border ${opType === 'PLANTIO' ? 'bg-emerald-50 text-emerald-500 border-emerald-100' : opType === 'ADUBACAO' ? 'bg-orange-50 text-orange-500 border-orange-100' : 'bg-blue-50 text-blue-500 border-blue-100'}`}>
+          {getTypeIcon(opType)}
         </div>
-        <span className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] italic">{order.applicationType}</span>
+        <span className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] italic">{getTypeName(opType)}</span>
       </div>
       <div className="grid grid-cols-3 gap-3 pt-2">
         {/* Lógica de Botões Principais */}
@@ -307,7 +326,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
                           <div>
                             <p className="text-[11px] font-black text-slate-900 uppercase">{item.productName}</p>
                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                              VOLUME TOTAL UTILIZADO: <span className="text-slate-900 font-black">{item.qtyTotal.toFixed(2)} L/Kg</span>
+                              TOTAL UTILIZADO: <span className="text-slate-900 font-black">{item.qtyTotal.toFixed(2)}</span>
                             </p>
                           </div>
                         </div>

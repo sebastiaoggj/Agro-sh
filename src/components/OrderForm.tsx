@@ -9,12 +9,12 @@ import {
   Printer, Share2, FileText, LayoutDashboard,
   Sparkles, Check, Search as SearchIcon,
   Loader2, FlaskConical, AlertTriangle,
-  PackageX
+  PackageX, Sprout, Layers
 } from 'lucide-react';
-import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder } from '../types';
+import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder, OperationType } from '../types';
 import OSPrintLayout from './OSPrintLayout';
 
-const MACHINE_TYPES = ['Pulverizador Terrestre', 'Avião Agrícola', 'Drone de Pulverização'];
+const MACHINE_TYPES = ['Pulverizador Terrestre', 'Avião Agrícola', 'Drone de Pulverização', 'Semeadora', 'Distribuidor de Sólidos'];
 
 interface OrderFormProps {
   initialData?: ServiceOrder | null;
@@ -54,9 +54,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   const [formData, setFormData] = useState({
     id: initialData?.id || '',
+    operationType: initialData?.operationType || 'PULVERIZACAO' as OperationType,
     farmId: initialData?.farmId || '',
     fieldIds: initialData?.fieldIds || (initialData?.fieldNames ? [] : []), 
-    // Geração automática do número da ordem
     orderNumber: initialData?.orderNumber || (() => {
       const year = new Date().getFullYear();
       const count = (existingOrders?.length || 0) + 1;
@@ -76,7 +76,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     speed: initialData?.speed || '',
     status: initialData?.status || OrderStatus.EMITTED,
     applicationType: initialData?.applicationType || 'HERBICIDA',
-    mandatoryPhrase: initialData?.mandatoryPhrase || 'É obrigatório o uso de EPI\'S - Luva, Máscara, Roupa impermeável e Óculos de proteção para manipular os produtos',
+    mandatoryPhrase: initialData?.mandatoryPhrase || 'É obrigatório o uso de EPI\'S.',
     observations: initialData?.observations || ''
   });
 
@@ -86,6 +86,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
       return { ...i, unit: originalInsumo?.unit || 'L/Kg' };
     }) || []
   );
+
+  // Efeito para trocar a frase obrigatória padrão ao mudar o tipo
+  useEffect(() => {
+    if (!initialData) {
+      if (formData.operationType === 'PULVERIZACAO') {
+        setFormData(prev => ({ ...prev, mandatoryPhrase: 'É obrigatório o uso de EPI\'S - Luva, Máscara, Roupa impermeável e Óculos de proteção.' }));
+      } else if (formData.operationType === 'PLANTIO') {
+        setFormData(prev => ({ ...prev, mandatoryPhrase: 'Verificar profundidade de semeadura e fechamento do sulco.' }));
+      } else {
+        setFormData(prev => ({ ...prev, mandatoryPhrase: 'Atenção à regulagem do distribuidor e velocidade de aplicação.' }));
+      }
+    }
+  }, [formData.operationType]);
 
   const uniqueCultures = useMemo(() => {
     const names = new Set(crops.map(c => c.name));
@@ -109,11 +122,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const selectedMachine = useMemo(() => machines.find(m => m.id === formData.machineId), [formData.machineId, machines]);
   const selectedOperator = useMemo(() => operators.find(o => o.id === formData.operatorId), [formData.operatorId, operators]);
 
-  // --- LÓGICA DE CÁLCULO ---
+  // --- LÓGICA DE CÁLCULO UNIFICADA ---
   const stats = useMemo(() => {
     const area = selectedFields.reduce((sum, f) => sum + f.area, 0);
-    const flow = Number(formData.flowRate) || 0;
-    const tankCap = Number(formData.tankCapacity) || 0;
+    const flow = Number(formData.flowRate) || 0; // Pode ser L/ha ou Kg/ha
+    const tankCap = Number(formData.tankCapacity) || 0; // Pode ser L ou Kg
     
     const totalVolume = area * flow;
     const haPerTank = flow > 0 ? tankCap / flow : 0;
@@ -157,7 +170,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'farmId') {
-      // Quando muda a fazenda, limpa os talhões selecionados E os itens da composição
       setFormData(prev => ({ ...prev, farmId: value, fieldIds: [] }));
       setItems([]); 
     } else if (name === 'culture') {
@@ -205,7 +217,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     setItems(newItems);
   };
 
-  // Check stock availability (returns array of missing items)
   const checkStockAvailability = () => {
     const missingItems: string[] = [];
     
@@ -214,8 +225,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const stockItem = insumos.find(i => i.id === item.insumoId);
       if (!stockItem) return;
 
-      // Lógica de saldo: Considera o estoque disponível atual.
-      // Se for edição de ordem já emitida, "devolvemos" o consumo dela para verificar se ainda cabe.
       let currentOrderUsage = 0;
       if (initialData && initialData.status === OrderStatus.EMITTED) {
          const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
@@ -224,7 +233,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
       const realAvailable = stockItem.availableQty + currentOrderUsage;
 
-      // Usando uma margem de erro pequena para ponto flutuante
       if (item.qtyTotal > (realAvailable + 0.001)) {
         missingItems.push(`${item.productName} (Necessário: ${item.qtyTotal.toFixed(2)} | Disponível: ${realAvailable.toFixed(2)})`);
       }
@@ -233,7 +241,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     return missingItems;
   };
 
-  // Check stock availability for a single item (returns boolean: is missing?)
   const isItemMissing = (item: ExtendedOSItem) => {
     if (!item.insumoId) return false;
     const stockItem = insumos.find(i => i.id === item.insumoId);
@@ -255,11 +262,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
       return;
     }
     if (!formData.flowRate || formData.flowRate <= 0) {
-      alert("Por favor, informe a Vazão (L/ha) para calcular a calda.");
+      alert("Por favor, informe a Vazão/Dosagem para calcular o volume total.");
       return;
     }
 
-    // Verificar estoque antes de ir para o resumo
     const missing = checkStockAvailability();
     if (missing.length > 0) {
       setStockWarning(`Estoque insuficiente. A ordem será gerada como "Aguardando Produto" e não consumirá reserva.`);
@@ -278,13 +284,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const validItems = items.filter(i => i.insumoId && i.insumoId !== '');
     const missing = checkStockAvailability();
     
-    // Se houver itens faltando, força o status para AGUARDANDO PRODUTO
     let finalStatus = formData.status;
     
     if (missing.length > 0) {
       finalStatus = OrderStatus.AWAITING_PRODUCT;
     } else if (finalStatus === OrderStatus.AWAITING_PRODUCT) {
-      // Se estava aguardando mas agora tem saldo, muda para EMITIDA
       finalStatus = OrderStatus.EMITTED;
     }
 
@@ -321,6 +325,38 @@ const OrderForm: React.FC<OrderFormProps> = ({
   }, [insumos, formData.farmId, farms]);
 
   const handlePrint = () => window.print();
+
+  // Helper para Labels dinâmicas
+  const getLabels = () => {
+    switch (formData.operationType) {
+      case 'PLANTIO': return {
+        techTitle: 'Configuração de Semeadura',
+        capacity: 'Capacidade cx Sementes (Kg)',
+        flow: 'População (mil sem/ha) ou Kg/ha',
+        nozzle: 'Disco / Anel',
+        pressure: 'Espaçamento (cm)',
+        unit: 'Kg'
+      };
+      case 'ADUBACAO': return {
+        techTitle: 'Configuração do Distribuidor',
+        capacity: 'Capacidade do Depósito (Kg)',
+        flow: 'Dosagem Alvo (Kg/ha)',
+        nozzle: 'Tipo de Disco',
+        pressure: 'Largura Faixa (m)',
+        unit: 'Kg'
+      };
+      default: return {
+        techTitle: 'Tecnologia de Aplicação',
+        capacity: 'Capacidade do Tanque (L)',
+        flow: 'Vazão Alvo (L/ha)',
+        nozzle: 'Bico / Ponta',
+        pressure: 'Pressão (Bar/PSI)',
+        unit: 'L'
+      };
+    }
+  };
+
+  const labels = getLabels();
 
   // --- RENDER ---
   if (step === 'SUCCESS') {
@@ -391,7 +427,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <div className="p-10 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
             <div>
               <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight italic">Revisão e Cálculos</h2>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Confira o preparo da calda e volumes</p>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Confira o planejamento da operação</p>
             </div>
             <div className="px-6 py-3 bg-white border border-slate-200 rounded-2xl shadow-sm">
               <span className="text-slate-900 font-black text-lg uppercase tracking-widest italic">#{formData.orderNumber}</span>
@@ -400,7 +436,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
           <div className="p-10 space-y-12">
             
-            {/* Bloco de Resumo de Tanques */}
+            {/* Bloco de Resumo de Cargas */}
             <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-8">
               <div className="flex items-center gap-3 mb-6">
                  <FlaskConical size={24} className="text-blue-500" />
@@ -409,15 +445,15 @@ const OrderForm: React.FC<OrderFormProps> = ({
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Tanques Cheios</p>
+                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cargas Cheias</p>
                    <p className="text-3xl font-black text-slate-900 mt-1">{stats.numberOfTanksFull}</p>
-                   <p className="text-xs font-bold text-slate-500 mt-1">de {formData.tankCapacity} L</p>
+                   <p className="text-xs font-bold text-slate-500 mt-1">de {formData.tankCapacity} {labels.unit}</p>
                 </div>
                 
                 {stats.hasPartialTank ? (
                   <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100 shadow-sm">
-                     <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest">Último Tanque (Parcial)</p>
-                     <p className="text-3xl font-black text-amber-700 mt-1">{stats.partialTankVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span className="text-sm">Litros</span></p>
+                     <p className="text-[10px] font-black uppercase text-amber-500 tracking-widest">Última Carga (Parcial)</p>
+                     <p className="text-3xl font-black text-amber-700 mt-1">{stats.partialTankVolume.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} <span className="text-sm">{labels.unit}</span></p>
                      <p className="text-xs font-bold text-amber-600 mt-1">Sobra de Área</p>
                   </div>
                 ) : (
@@ -429,8 +465,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 )}
 
                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Volume Total Calda</p>
-                   <p className="text-3xl font-black text-blue-600 mt-1">{stats.totalVolume.toLocaleString('pt-BR')} <span className="text-sm">L</span></p>
+                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Necessário</p>
+                   <p className="text-3xl font-black text-blue-600 mt-1">{stats.totalVolume.toLocaleString('pt-BR')} <span className="text-sm">{labels.unit}</span></p>
                    <p className="text-xs font-bold text-slate-500 mt-1">Para {stats.area.toFixed(2)} ha</p>
                 </div>
               </div>
@@ -440,7 +476,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <div className="space-y-6">
               <div className="flex items-center gap-4 text-emerald-600">
                 <Beaker size={22} strokeWidth={2.5} />
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Receituário: Tanque Cheio</h3>
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Composição: Carga Cheia</h3>
               </div>
               <div className="border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
                 <table className="w-full text-left">
@@ -448,7 +484,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-200">
                       <th className="px-8 py-5">Produto</th>
                       <th className="px-8 py-5 text-center">Dose / ha</th>
-                      <th className="px-8 py-5 text-center bg-blue-50/50 text-blue-700">Carga Tanque Cheio</th>
+                      <th className="px-8 py-5 text-center bg-blue-50/50 text-blue-700">Por Carga</th>
                       <th className="px-8 py-5 text-right">Total Operação</th>
                     </tr>
                   </thead>
@@ -486,19 +522,19 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center gap-4 text-amber-600">
                   <AlertCircle size={22} strokeWidth={2.5} />
-                  <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Preparo do Último Tanque (Parcial)</h3>
+                  <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Preparo da Última Carga (Parcial)</h3>
                 </div>
                 <div className="border border-amber-200 bg-amber-50/30 rounded-[2.5rem] overflow-hidden shadow-sm">
                   <div className="px-8 py-4 bg-amber-100/50 border-b border-amber-200">
                     <p className="text-[10px] font-black uppercase text-amber-800 tracking-widest">
-                      Volume de Calda: {stats.partialTankVolume.toLocaleString('pt-BR')} Litros
+                      Volume da Carga: {stats.partialTankVolume.toLocaleString('pt-BR')} {labels.unit}
                     </p>
                   </div>
                   <table className="w-full text-left">
                     <thead>
                       <tr className="text-amber-700 text-[10px] uppercase font-black tracking-widest border-b border-amber-100">
                         <th className="px-8 py-5">Produto</th>
-                        <th className="px-8 py-5 text-right">Quantidade para Mistura</th>
+                        <th className="px-8 py-5 text-right">Quantidade</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-amber-100">
@@ -559,6 +595,32 @@ const OrderForm: React.FC<OrderFormProps> = ({
         </div>
 
         <div className="p-10 space-y-10">
+          
+          {/* Seletor de Tipo de Operação */}
+          <div className="bg-slate-100 p-1.5 rounded-2xl flex gap-1">
+            <button 
+              onClick={() => setFormData({...formData, operationType: 'PULVERIZACAO'})}
+              className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-3 transition-all ${formData.operationType === 'PULVERIZACAO' ? 'bg-white shadow-md text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <Droplets size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Pulverização</span>
+            </button>
+            <button 
+              onClick={() => setFormData({...formData, operationType: 'PLANTIO'})}
+              className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-3 transition-all ${formData.operationType === 'PLANTIO' ? 'bg-white shadow-md text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <Sprout size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Plantio</span>
+            </button>
+            <button 
+              onClick={() => setFormData({...formData, operationType: 'ADUBACAO'})}
+              className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-3 transition-all ${formData.operationType === 'ADUBACAO' ? 'bg-white shadow-md text-orange-600' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <Layers size={20} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Adubação</span>
+            </button>
+          </div>
+
           {/* Seção 1: Dados Gerais e Localização */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-2">
@@ -701,81 +763,64 @@ const OrderForm: React.FC<OrderFormProps> = ({
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Identificação da Máquina</label>
               <select name="machineId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all disabled:opacity-50" value={formData.machineId} onChange={handleInputChange} disabled={!formData.machineType}>
                 <option value="">MODELO ALOCADO</option>
-                {/* Filtrar máquinas que correspondem ao tipo selecionado, ou mostrar todas se não houver tipo definido no DB ainda */}
                 {machines.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Seção de Tecnologia de Aplicação */}
+          {/* Seção de Tecnologia de Aplicação Adaptativa */}
           <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 space-y-8">
             <div className="flex items-center gap-4 text-blue-600 border-b border-slate-200 pb-4">
               <Settings size={22} strokeWidth={2.5} />
-              <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Tecnologia de Aplicação</h3>
+              <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">{labels.techTitle}</h3>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Capacidade (L)</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{labels.capacity}</label>
                 <input type="number" name="tankCapacity" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.tankCapacity || ''} onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Vazão Alvo (L/ha)</label>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{labels.flow}</label>
                 <input type="number" name="flowRate" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.flowRate || ''} onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Bico / Ponta</label>
-                <input type="text" name="nozzle" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="EX: AIXR 11002" value={formData.nozzle} onChange={handleInputChange} />
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{labels.nozzle}</label>
+                <input type="text" name="nozzle" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Configuração" value={formData.nozzle} onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Pressão (Bar/PSI)</label>
-                <input type="text" name="pressure" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="EX: 3 BAR" value={formData.pressure} onChange={handleInputChange} />
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">{labels.pressure}</label>
+                <input type="text" name="pressure" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Configuração" value={formData.pressure} onChange={handleInputChange} />
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Velocidade (Km/h)</label>
-                <input type="text" name="speed" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="EX: 18 KM/H" value={formData.speed} onChange={handleInputChange} />
+                <input type="text" name="speed" className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="EX: 6 KM/H" value={formData.speed} onChange={handleInputChange} />
               </div>
             </div>
-
-            {/* Alerta de Validação Técnica */}
-            {(formData.flowRate > 0 && formData.speed && formData.pressure) && (
-              <div className="flex items-center gap-3 text-[10px] text-amber-700 bg-amber-50 p-4 rounded-2xl border border-amber-100 animate-in fade-in">
-                <div className="bg-amber-100 p-2 rounded-lg text-amber-600">
-                  <AlertTriangle size={16} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-black uppercase tracking-wide">Validação de Segurança</span>
-                  <span className="font-medium mt-0.5">
-                    Certifique-se de que a pressão de <strong>{formData.pressure}</strong> é adequada para a vazão de <strong>{formData.flowRate} L/ha</strong> à velocidade de <strong>{formData.speed} km/h</strong> com o bico selecionado.
-                  </span>
-                </div>
-              </div>
-            )}
 
             {/* Resultados Automáticos (Read Only) */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-200">
                <div className="bg-blue-100/50 border border-blue-200 rounded-2xl p-4 flex flex-col justify-center">
-                 <span className="text-[9px] font-black uppercase text-blue-400 tracking-widest">Autonomia (ha/Tanque)</span>
+                 <span className="text-[9px] font-black uppercase text-blue-400 tracking-widest">Autonomia (ha/Carga)</span>
                  <span className="text-xl font-black text-blue-700 italic">{stats.haPerTank.toFixed(2)} ha</span>
-                 <p className="text-[9px] text-blue-400 mt-1">Cálculo: Cap. {formData.tankCapacity}L / Vazão {formData.flowRate}L/ha</p>
+                 <p className="text-[9px] text-blue-400 mt-1">Cálculo: Cap. {formData.tankCapacity} / Taxa {formData.flowRate}</p>
                </div>
                <div className="bg-emerald-100/50 border border-emerald-200 rounded-2xl p-4 flex flex-col justify-center">
-                 <span className="text-[9px] font-black uppercase text-emerald-500 tracking-widest">Volume Total da Calda</span>
-                 <span className="text-xl font-black text-emerald-700 italic">{stats.totalVolume.toLocaleString('pt-BR')} Litros</span>
+                 <span className="text-[9px] font-black uppercase text-emerald-500 tracking-widest">Volume Total Necessário</span>
+                 <span className="text-xl font-black text-emerald-700 italic">{stats.totalVolume.toLocaleString('pt-BR')} {labels.unit}</span>
                  <p className="text-[9px] text-emerald-500 mt-1">Para área total de {stats.area.toFixed(2)} ha</p>
                </div>
                
-               {/* Novo Card de Planejamento de Tanques */}
                <div className="bg-orange-100/50 border border-orange-200 rounded-2xl p-4 flex flex-col justify-center">
                  <span className="text-[9px] font-black uppercase text-orange-500 tracking-widest">Reabastecimentos</span>
                  <span className="text-lg font-black text-orange-700 italic leading-tight">
-                   {stats.numberOfTanksFull} Cheios
+                   {stats.numberOfTanksFull} Cargas Cheias
                    {stats.hasPartialTank && <span className="text-orange-600/80 text-sm"> + 1 Parcial</span>}
                  </span>
                  <p className="text-[9px] text-orange-500 mt-1 font-bold">
                    {stats.hasPartialTank 
-                     ? `(${stats.numberOfTanksFull}x ${formData.tankCapacity}L + 1x ${stats.partialTankVolume.toFixed(0)}L)` 
-                     : `Carga exata de ${formData.tankCapacity}L`}
+                     ? `(${stats.numberOfTanksFull}x ${formData.tankCapacity}${labels.unit} + 1x ${stats.partialTankVolume.toFixed(0)}${labels.unit})` 
+                     : `Carga exata de ${formData.tankCapacity}${labels.unit}`}
                  </p>
                </div>
             </div>
@@ -785,7 +830,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 text-emerald-600">
                 <Droplets size={22} strokeWidth={2.5} />
-                <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Composição da Calda</h3>
+                <h3 className="text-sm font-black uppercase tracking-[0.2em] italic">Insumos e Produtos</h3>
               </div>
               <button 
                 onClick={addProduct} 
@@ -805,14 +850,14 @@ const OrderForm: React.FC<OrderFormProps> = ({
                   </button>
                   <div className="grid grid-cols-1 md:grid-cols-6 gap-8 items-end">
                     <div className="md:col-span-3 space-y-2">
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Produto Composto</label>
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Produto</label>
                       <select 
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" 
                         value={item.insumoId} 
                         onChange={(e) => updateItem(idx, e.target.value, item.dosePerHa)}
                       >
                         <option value="">
-                          {availableInsumos.length > 0 ? "SELECIONE O PRODUTO..." : "NENHUM PRODUTO NESTA FAZENDA"}
+                          {availableInsumos.length > 0 ? "SELECIONE..." : "NENHUM PRODUTO NESTA FAZENDA"}
                         </option>
                         {availableInsumos.map(ins => (
                           <option key={ins.id} value={ins.id}>
@@ -831,7 +876,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                     
                     {/* Campos de Resultado Travados */}
                     <div className="md:col-span-1 flex flex-col items-center bg-slate-100 p-4 rounded-xl border border-slate-200 opacity-80 cursor-not-allowed">
-                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Carga/Tanque</span>
+                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">Por Carga</span>
                       <span className="text-xs font-black text-slate-700">{item.qtyPerTank > 0 ? item.qtyPerTank.toFixed(2) : '-'}</span>
                     </div>
                     <div className="md:col-span-1 flex flex-col items-center bg-emerald-50 p-4 rounded-xl border border-emerald-100 opacity-80 cursor-not-allowed">
@@ -846,7 +891,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 <div className="p-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-center text-slate-400">
                   <p className="text-xs font-black uppercase tracking-widest">Nenhum insumo adicionado</p>
                   <p className="text-[10px] font-bold mt-1 opacity-70">
-                    {!formData.farmId ? "Selecione uma fazenda acima para liberar os produtos." : "Clique em 'Adicionar Insumo' para compor a calda."}
+                    {!formData.farmId ? "Selecione uma fazenda acima para liberar os produtos." : "Clique em 'Adicionar Insumo' para compor a ordem."}
                   </p>
                 </div>
               )}
