@@ -13,22 +13,20 @@ serve(async (req) => {
   }
 
   try {
-    // Cria cliente com permissão de Admin (Service Role)
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Pega o token do usuário que chamou a função para verificar se ele é admin
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) throw new Error('Sem autorização')
     
     const token = authHeader.replace('Bearer ', '')
     const { data: { user: requestUser }, error: userError } = await supabaseAdmin.auth.getUser(token)
     
-    if (userError || !requestUser) throw new Error('Usuário inválido')
+    if (userError || !requestUser) throw new Error('Usuário inválido ou sessão expirada')
 
-    // Verifica no banco se esse usuário é realmente admin
+    // Verifica se o solicitante é admin
     const { data: profile } = await supabaseAdmin
       .from('user_profiles')
       .select('role, can_manage_users')
@@ -36,16 +34,15 @@ serve(async (req) => {
       .single()
 
     if (!profile || profile.role !== 'admin' || !profile.can_manage_users) {
-      return new Response(JSON.stringify({ error: 'Permissão negada' }), {
+      return new Response(JSON.stringify({ error: 'Permissão negada. Apenas administradores.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    const { action, email, password, fullName, permissions } = await req.json()
+    const { action, email, password, fullName, permissions, userId } = await req.json()
 
     if (action === 'create') {
-      // 1. Criar Usuário no Auth
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email: email,
         password: password,
@@ -55,16 +52,15 @@ serve(async (req) => {
 
       if (createError) throw createError
 
-      // 2. Atualizar permissões no perfil (o trigger já criou o perfil básico, agora atualizamos)
       if (newUser.user) {
-        // Pequeno delay para garantir que o trigger rodou
+        // Aguarda trigger criar o perfil
         await new Promise(r => setTimeout(r, 1000));
         
         const { error: updateError } = await supabaseAdmin
           .from('user_profiles')
           .update({
             full_name: fullName,
-            role: 'operator', // Padrão, admin muda se quiser depois na UI
+            role: 'operator',
             can_manage_users: permissions.can_manage_users,
             can_manage_inputs: permissions.can_manage_inputs,
             can_manage_machines: permissions.can_manage_machines
@@ -74,15 +70,17 @@ serve(async (req) => {
         if (updateError) throw updateError
       }
 
-      return new Response(JSON.stringify({ message: 'Usuário criado com sucesso', user: newUser.user }), {
+      return new Response(JSON.stringify({ message: 'Usuário criado com sucesso' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
     } 
     
     else if (action === 'reset_password') {
-        const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-            permissions.userId, // Reutilizando o objeto permissions para passar o ID
+        if (!userId) throw new Error("ID do usuário necessário");
+
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(
+            userId,
             { password: password }
         );
         

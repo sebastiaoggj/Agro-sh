@@ -154,7 +154,7 @@ const TeamManagement: React.FC = () => {
 
       const result = await response.json();
       
-      if (!response.ok) throw new Error(result.error);
+      if (!response.ok) throw new Error(result.error || 'Erro desconhecido');
 
       alert("Usuário criado com sucesso!");
       setIsModalOpen(false);
@@ -167,7 +167,7 @@ const TeamManagement: React.FC = () => {
     } catch (error: any) {
       alert(`Erro: ${error.message}`);
     } finally {
-      if (actionLoading) setActionLoading(false);
+      setActionLoading(false); // Correção: Removemos o 'if' para garantir que sempre execute
     }
   };
 
@@ -198,11 +198,14 @@ const TeamManagement: React.FC = () => {
         body: JSON.stringify({
           action: 'reset_password',
           password: newPasswordReset,
-          permissions: { userId: selectedUser.id }
+          userId: selectedUser.id // Enviando ID explicitamente
         })
       });
 
-      if (!response.ok) throw new Error('Falha ao resetar senha');
+      if (!response.ok) {
+        const res = await response.json();
+        throw new Error(res.error || 'Falha ao resetar senha');
+      }
 
       alert("Senha alterada com sucesso.");
       setIsResetModalOpen(false);
@@ -212,7 +215,7 @@ const TeamManagement: React.FC = () => {
     } catch (error: any) {
       alert(`Erro: ${error.message}`);
     } finally {
-      if (actionLoading) setActionLoading(false);
+      setActionLoading(false); // Correção: Removemos o 'if'
     }
   };
 
