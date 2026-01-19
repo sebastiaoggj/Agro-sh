@@ -179,11 +179,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
 
       // 3. Advanced Filters
       const matchesFarm = selectedFarm ? o.farmName === selectedFarm : true;
-      
-      // Checa se o talhão selecionado está NA LISTA de talhões da ordem
       const matchesField = selectedField ? (o.fieldNames && o.fieldNames.includes(selectedField)) : true;
-      
-      // Checa se o produto selecionado está NA LISTA de itens da ordem
       const matchesProduct = selectedProduct ? (o.items && o.items.some(i => i.productName === selectedProduct)) : true;
 
       return matchesText && matchesHarvest && matchesFarm && matchesField && matchesProduct;
@@ -217,6 +213,61 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       const price = stockItem?.price || 0;
       return total + (item.qtyTotal * price);
     }, 0);
+  };
+
+  const handleExportExcel = () => {
+    if (filteredOrders.length === 0) {
+      alert("Não há dados para exportar com os filtros atuais.");
+      return;
+    }
+
+    const headers = [
+      "Número OS",
+      "Fazenda",
+      "Talhões",
+      "Cultura",
+      "Safra",
+      "Área Total (ha)",
+      "Volume Total",
+      "Custo Estimado (R$)",
+      "Status",
+      "Data Recomendação",
+      "Data Limite"
+    ];
+
+    const csvRows = [
+      headers.join(';'),
+      ...filteredOrders.map(order => {
+        const totalCost = calculateTotalCost(order);
+        const harvestName = getOrderHarvest(order.recommendationDate);
+        
+        return [
+          order.orderNumber,
+          `"${order.farmName}"`,
+          `"${order.fieldNames.join(', ')}"`,
+          order.culture,
+          `"${harvestName}"`,
+          order.totalArea.toString().replace('.', ','),
+          order.totalVolume.toString().replace('.', ','),
+          totalCost.toFixed(2).replace('.', ','),
+          order.status,
+          order.recommendationDate ? new Date(order.recommendationDate).toLocaleDateString('pt-BR') : '',
+          order.maxApplicationDate ? new Date(order.maxApplicationDate).toLocaleDateString('pt-BR') : ''
+        ].join(';');
+      })
+    ];
+
+    // Adiciona BOM para o Excel reconhecer acentuação corretamente
+    const csvString = '\uFEFF' + csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `relatorio_operacional_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handlePrint = (order: ServiceOrder) => {
@@ -269,7 +320,10 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
               {activeFiltersCount > 0 && <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[9px]">{activeFiltersCount}</span>}
               {isFiltersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <button className="flex items-center gap-3 bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-900/20 active:scale-95">
+            <button 
+              onClick={handleExportExcel}
+              className="flex items-center gap-3 bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-900/20 active:scale-95"
+            >
               <Download size={18} /> Exportar Excel
             </button>
           </div>
