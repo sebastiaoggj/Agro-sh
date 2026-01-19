@@ -123,7 +123,7 @@ const Login: React.FC = () => {
 
         <div className="mt-8 text-center">
           <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">
-            SH Oliveira &copy; 2024
+            SH Oliveira &copy; 2026
           </p>
         </div>
       </div>
