@@ -41,14 +41,14 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-900">
       
-      {/* Imagem de Fundo com Desfoque Ajustado */}
-      <div 
-        className="absolute inset-0 z-0 transform scale-105"
+      {/* Imagem de Fundo Corrigida */}
+      <img 
+        src="https://images.unsplash.com/photo-1532509176319-943cc979c3d9?q=80&w=2670&auto=format&fit=crop"
+        alt="Background Agro"
+        className="absolute inset-0 w-full h-full object-cover z-0"
         style={{
-          backgroundImage: `url('https://images.unsplash.com/photo-1532509176319-943cc979c3d9?q=80&w=2670&auto=format&fit=crop')`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          filter: 'blur(3px) brightness(0.65)' // Desfoque suave (3px) e leve escurecimento
+          filter: 'blur(3px) brightness(0.65)',
+          transform: 'scale(1.05)'
         }}
       />
 
