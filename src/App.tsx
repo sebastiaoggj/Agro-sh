@@ -20,6 +20,7 @@ import PurchaseOrders from './components/PurchaseOrders';
 import InsumoMaster from './components/InsumoMaster';
 import TeamManagement from './components/TeamManagement';
 import HarvestManagement from './components/HarvestManagement';
+import Login from './components/Login';
 
 import { ServiceOrder, Insumo, PurchaseOrder, MasterInsumo, StockHistoryEntry, PurchaseOrderStatus, Field, Machine, OrderStatus, OperationType } from './types';
 
@@ -68,9 +69,9 @@ const App: React.FC = () => {
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
 
-  // AUTO LOGIN LOGIC
+  // AUTH CHECK
   useEffect(() => {
-    const performAutoLogin = async () => {
+    const checkSession = async () => {
       try {
         const { data: { session: existingSession } } = await supabase.auth.getSession();
         
@@ -78,38 +79,25 @@ const App: React.FC = () => {
           setSession(existingSession);
           await fetchUserProfile(existingSession.user.id);
         } else {
-          // Tenta fazer login automático
-          const email = 'admin@agro.com';
-          const password = 'admin123';
-
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email,
-            password
-          });
-
-          if (!signInError && signInData.session) {
-            setSession(signInData.session);
-            await fetchUserProfile(signInData.session.user.id);
-          } else {
-            console.warn("Entrando em modo offline.");
-            createDummySession();
-          }
+          setSession(null);
         }
       } catch (e) {
-        console.error("Erro no login:", e);
-        createDummySession();
+        console.error("Erro na verificação de sessão:", e);
+        setSession(null);
       } finally {
         setAuthProcessing(false);
         setLoading(false);
       }
     };
 
-    performAutoLogin();
+    checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
       if (session) {
-        setSession(session);
         fetchUserProfile(session.user.id);
+      } else {
+        setUserProfile(null);
       }
     });
 
@@ -139,10 +127,11 @@ const App: React.FC = () => {
       if (data) {
         setUserProfile(data as UserProfile);
       } else {
+        // Fallback temporário se o perfil ainda não existir
         setUserProfile({
           id: userId,
           role: 'admin',
-          full_name: 'ADMIN',
+          full_name: 'USUÁRIO',
           can_manage_inputs: true,
           can_manage_machines: true,
           can_manage_users: true
@@ -150,7 +139,6 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.error("Erro ao buscar perfil", e);
-      createDummySession();
     }
   };
 
@@ -272,8 +260,9 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Carrega dados independentemente do estado da sessão
-    fetchAllData();
+    if (session) {
+      fetchAllData();
+    }
   }, [session]);
 
   const triggerAutoRelease = async () => {
@@ -604,7 +593,8 @@ const App: React.FC = () => {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    window.location.reload();
+    setSession(null);
+    setUserProfile(null);
   };
 
   const handleRefresh = async () => { 
@@ -621,6 +611,11 @@ const App: React.FC = () => {
     can_manage_machines: true,
     full_name: 'SISTEMA'
   };
+
+  // Se não houver sessão e não estiver processando, mostra o Login
+  if (!session && !authProcessing) {
+    return <Login />;
+  }
 
   if (authProcessing || loading) {
     return (
