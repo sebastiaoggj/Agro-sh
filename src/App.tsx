@@ -563,6 +563,15 @@ const App: React.FC = () => {
              user_name: userProfile?.full_name || 'Sistema',
              user_id: session?.user?.id || offlineUserId
           });
+
+          // ATUALIZAÇÃO DO PREÇO NO INSUMO MESTRE
+          const unitPrice = Number(po.total_value) / Number(po.quantity);
+          if (!isNaN(unitPrice) && unitPrice > 0 && po.master_insumo_id) {
+             await supabase
+               .from('master_insumos')
+               .update({ price: unitPrice })
+               .eq('id', po.master_insumo_id);
+          }
        }
 
        // 2. Atualiza status do pedido

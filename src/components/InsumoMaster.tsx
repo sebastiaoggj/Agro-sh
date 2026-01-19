@@ -281,7 +281,7 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Preço Médio (R$)</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Preço da Última Compra (R$)</label>
                   <div className="relative">
                     <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500" size={16} />
                     <input 
