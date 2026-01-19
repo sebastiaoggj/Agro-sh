@@ -285,6 +285,9 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
     setPartialModalOpen(false);
     setAdditionModalOpen(false);
     setSelectedOrder(null);
+    // Reset addition states
+    setSelectedAddItem('');
+    setAddQty('');
   };
 
   const confirmPartial = () => {
@@ -300,7 +303,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
     if (itemRef) {
       setAdditionData(prev => ({
         ...prev,
-        items: [...prev.items, { insumoId: selectedAddItem, qty: Number(addQty), name: itemRef.productName, unit: 'UN' }] // Unit simplificado, idealmente viria do item
+        items: [...prev.items, { insumoId: selectedAddItem, qty: Number(addQty), name: itemRef.productName, unit: 'UN' }]
       }));
       setSelectedAddItem('');
       setAddQty('');
@@ -312,8 +315,23 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
   };
 
   const confirmAddition = () => {
-    if (selectedOrder && additionData.items.length > 0) {
-      onRegisterAddition(selectedOrder.id, additionData.items, additionData.description);
+    // Verifica se há item pendente nos inputs que não foi adicionado à lista
+    let itemsToProcess = [...additionData.items];
+    
+    if (selectedAddItem && addQty && Number(addQty) > 0) {
+       const itemRef = selectedOrder?.items.find(i => i.insumoId === selectedAddItem);
+       if (itemRef) {
+         itemsToProcess.push({ 
+           insumoId: selectedAddItem, 
+           qty: Number(addQty), 
+           name: itemRef.productName, 
+           unit: 'UN' 
+         });
+       }
+    }
+
+    if (selectedOrder && itemsToProcess.length > 0) {
+      onRegisterAddition(selectedOrder.id, itemsToProcess, additionData.description);
       closeModals();
     }
   };
@@ -334,6 +352,9 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
     { title: 'Aguardando Produto', status: OrderStatus.AWAITING_PRODUCT },
     { title: 'Em Aplicação', status: OrderStatus.IN_PROGRESS },
   ];
+
+  // Helper para verificar se botão deve estar habilitado (Lista > 0 OU Input preenchido)
+  const isAdditionButtonEnabled = additionData.items.length > 0 || (selectedAddItem !== '' && addQty !== '' && Number(addQty) > 0);
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-500 overflow-hidden pt-12 text-slate-900">
@@ -592,8 +613,8 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
 
             <button 
               onClick={confirmAddition} 
-              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-3"
-              disabled={additionData.items.length === 0}
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!isAdditionButtonEnabled}
             >
               <PackageCheck size={18} /> Confirmar Aditivo (Baixa Estoque)
             </button>
