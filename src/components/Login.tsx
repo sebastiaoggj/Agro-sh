@@ -58,7 +58,6 @@ const Login: React.FC = () => {
           <div className="w-24 h-24 bg-white border-2 border-[#0047AB] rounded-2xl flex flex-col items-center justify-center p-2 mb-6 shadow-xl shadow-blue-900/10">
             <div className="flex items-center gap-1 mt-1">
               <span className="text-[#0047AB] font-black text-4xl leading-none">S</span>
-              <div className="w-2 h-1.5 bg-[#0047AB] rounded-sm mt-1"></div>
               <span className="text-[#0047AB] font-black text-4xl leading-none">H</span>
             </div>
             <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>

@@ -38,7 +38,6 @@ const SHLogo: React.FC<{ isSidebarOpen: boolean }> = ({ isSidebarOpen }) => (
   <div className="w-12 h-12 bg-white rounded-xl flex flex-col items-center justify-center shrink-0 shadow-sm border border-slate-200 overflow-hidden p-1 group hover:border-blue-200 transition-colors">
     <div className="flex items-center gap-0.5 mt-1">
       <span className="text-[#0047AB] font-black text-2xl leading-none tracking-tighter">S</span>
-      <div className="w-1.5 h-1 bg-[#0047AB] rounded-[1px] mt-0.5"></div>
       <span className="text-[#0047AB] font-black text-2xl leading-none tracking-tighter">H</span>
     </div>
     <span className="text-[#0047AB] font-bold text-[5px] uppercase tracking-wider transform scale-x-110 -mt-0.5">Agropecuária</span>
@@ -623,7 +622,6 @@ const App: React.FC = () => {
         <div className="w-24 h-24 bg-white rounded-3xl flex flex-col items-center justify-center shadow-xl shadow-slate-200 border border-slate-100 p-2 animate-pulse">
             <div className="flex items-center gap-0.5">
               <span className="text-[#0047AB] font-black text-4xl leading-none">S</span>
-              <div className="w-1.5 h-1.5 bg-[#0047AB] rounded-sm mt-1"></div>
               <span className="text-[#0047AB] font-black text-4xl leading-none">H</span>
             </div>
             <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
