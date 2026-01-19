@@ -19,7 +19,12 @@ import {
   Trash2,
   X,
   DollarSign,
-  CalendarRange
+  CalendarRange,
+  Sprout,
+  Beaker,
+  Tractor,
+  ChevronUp,
+  RefreshCcw
 } from 'lucide-react';
 import { OrderStatus, ServiceOrder, Insumo, Harvest } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -100,6 +105,12 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<ServiceOrder | null>(null);
   
+  // Advanced Filter States
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [selectedFarm, setSelectedFarm] = useState<string>('');
+  const [selectedField, setSelectedField] = useState<string>('');
+  const [selectedProduct, setSelectedProduct] = useState<string>('');
+  
   // Harvest States
   const [harvests, setHarvests] = useState<Harvest[]>([]);
   const [selectedHarvestId, setSelectedHarvestId] = useState<string>('all');
@@ -125,6 +136,25 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     fetchHarvests();
   }, []);
 
+  // Extract unique options from orders for dropdowns
+  const filterOptions = useMemo(() => {
+    const farms = new Set<string>();
+    const fields = new Set<string>();
+    const products = new Set<string>();
+
+    orders.forEach(order => {
+      if (order.farmName) farms.add(order.farmName);
+      if (order.fieldNames) order.fieldNames.forEach(f => fields.add(f));
+      if (order.items) order.items.forEach(i => products.add(i.productName));
+    });
+
+    return {
+      farms: Array.from(farms).sort(),
+      fields: Array.from(fields).sort(),
+      products: Array.from(products).sort()
+    };
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       // 1. Text Search
@@ -147,9 +177,18 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
         }
       }
 
-      return matchesText && matchesHarvest;
+      // 3. Advanced Filters
+      const matchesFarm = selectedFarm ? o.farmName === selectedFarm : true;
+      
+      // Checa se o talhão selecionado está NA LISTA de talhões da ordem
+      const matchesField = selectedField ? (o.fieldNames && o.fieldNames.includes(selectedField)) : true;
+      
+      // Checa se o produto selecionado está NA LISTA de itens da ordem
+      const matchesProduct = selectedProduct ? (o.items && o.items.some(i => i.productName === selectedProduct)) : true;
+
+      return matchesText && matchesHarvest && matchesFarm && matchesField && matchesProduct;
     });
-  }, [orders, searchTerm, selectedHarvestId, harvests]);
+  }, [orders, searchTerm, selectedHarvestId, harvests, selectedFarm, selectedField, selectedProduct]);
 
   // Identify harvest for a specific order based on date
   const getOrderHarvest = (dateStr?: string) => {
@@ -192,13 +231,23 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     setActiveMenuId(activeMenuId === id ? null : id);
   };
 
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedFarm('');
+    setSelectedField('');
+    setSelectedProduct('');
+    setSelectedHarvestId('all');
+  };
+
+  const activeFiltersCount = [selectedFarm, selectedField, selectedProduct, searchTerm].filter(Boolean).length + (selectedHarvestId !== 'all' ? 1 : 0);
+
   return (
     <>
       {/* Print Layout - Outside of the hidden container */}
       {orderToPrint && <OSPrintLayout order={orderToPrint} />}
 
       {/* Main Content - Hidden when printing */}
-      <div className="max-w-7xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative print:hidden">
+      <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative print:hidden">
         {/* Backdrop for menu */}
         {activeMenuId && (
           <div className="fixed inset-0 z-30 cursor-default" onClick={() => setActiveMenuId(null)} />
@@ -211,14 +260,111 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Histórico consolidado de aplicações e performance de campo</p>
           </div>
           <div className="flex gap-4">
-            <button className="flex items-center gap-3 bg-white border border-slate-200 text-slate-600 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-              <Filter size={18} /> Filtros Avançados
+            <button 
+              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+              className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm border ${isFiltersOpen ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Filter size={18} /> 
+              Filtros Avançados
+              {activeFiltersCount > 0 && <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[9px]">{activeFiltersCount}</span>}
+              {isFiltersOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
             <button className="flex items-center gap-3 bg-slate-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-900/20 active:scale-95">
               <Download size={18} /> Exportar Excel
             </button>
           </div>
         </div>
+
+        {/* Advanced Filters Panel */}
+        {isFiltersOpen && (
+          <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-lg animate-in slide-in-from-top-4 z-20">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3 text-slate-400">
+                <Filter size={20} />
+                <span className="text-xs font-black uppercase tracking-widest">Refinar Resultados</span>
+              </div>
+              <button onClick={clearFilters} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-red-500 transition-colors">
+                <RefreshCcw size={14} /> Limpar Tudo
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Safra */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Período / Safra</label>
+                <div className="relative group">
+                  <CalendarRange className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3.5 text-[10px] font-black text-slate-700 outline-none appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
+                    value={selectedHarvestId}
+                    onChange={(e) => setSelectedHarvestId(e.target.value)}
+                  >
+                    <option value="all">TODAS AS SAFRAS</option>
+                    {harvests.map(h => (
+                      <option key={h.id} value={h.id}>
+                        {h.name} {h.isActive ? '(VIGENTE)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+              </div>
+
+              {/* Fazenda */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Propriedade</label>
+                <div className="relative group">
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3.5 text-[10px] font-black text-slate-700 outline-none appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
+                    value={selectedFarm}
+                    onChange={(e) => { setSelectedFarm(e.target.value); setSelectedField(''); }} // Reset field on farm change
+                  >
+                    <option value="">TODAS AS FAZENDAS</option>
+                    {filterOptions.farms.map(farm => <option key={farm} value={farm}>{farm}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+              </div>
+
+              {/* Talhão */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Talhão</label>
+                <div className="relative group">
+                  <Tractor className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3.5 text-[10px] font-black text-slate-700 outline-none appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest disabled:opacity-50"
+                    value={selectedField}
+                    onChange={(e) => setSelectedField(e.target.value)}
+                  >
+                    <option value="">TODOS OS TALHÕES</option>
+                    {filterOptions.fields.filter(f => !selectedFarm || orders.some(o => o.farmName === selectedFarm && o.fieldNames.includes(f)))
+                      .map(field => <option key={field} value={field}>{field}</option>
+                    )}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+              </div>
+
+              {/* Insumo */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Produto Aplicado</label>
+                <div className="relative group">
+                  <Beaker className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3.5 text-[10px] font-black text-slate-700 outline-none appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
+                    value={selectedProduct}
+                    onChange={(e) => setSelectedProduct(e.target.value)}
+                  >
+                    <option value="">TODOS OS PRODUTOS</option>
+                    {filterOptions.products.map(prod => <option key={prod} value={prod}>{prod}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Summary Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
@@ -252,35 +398,17 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
           />
         </div>
 
-        {/* Filters Row */}
+        {/* Filters Row (Busca Simples) */}
         <div className="bg-white border border-slate-200 rounded-[2.5rem] p-6 flex flex-wrap items-center gap-6 shadow-sm">
           <div className="relative flex-1 min-w-[300px] group">
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={18} />
             <input 
               type="text" 
-              placeholder="BUSCAR POR ID OU PROPRIEDADE..." 
+              placeholder="BUSCAR POR ID OU TEXTO LIVRE..." 
               className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-14 pr-6 py-4 text-[10px] font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-          </div>
-          
-          {/* Harvest Filter */}
-          <div className="relative group min-w-[200px]">
-            <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <select 
-              className="w-full bg-white border border-slate-200 rounded-2xl pl-14 pr-14 py-4 text-[10px] font-black text-slate-600 outline-none appearance-none cursor-pointer shadow-sm uppercase tracking-widest focus:ring-2 focus:ring-emerald-500 transition-all"
-              value={selectedHarvestId}
-              onChange={(e) => setSelectedHarvestId(e.target.value)}
-            >
-              <option value="all">TODAS AS SAFRAS</option>
-              {harvests.map(h => (
-                <option key={h.id} value={h.id}>
-                  {h.name} {h.isActive ? '(VIGENTE)' : ''}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
           </div>
         </div>
 
@@ -403,7 +531,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                 ) : (
                   <tr>
                     <td colSpan={9} className="px-10 py-20 text-center text-slate-300 font-black uppercase tracking-widest text-xs italic">
-                      Nenhuma ordem encontrada nesta safra
+                      Nenhuma ordem encontrada com os filtros atuais
                     </td>
                   </tr>
                 )}
