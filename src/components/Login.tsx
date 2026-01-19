@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
-import { Lock, User, Loader2, ArrowRight, Fingerprint, Mail } from 'lucide-react';
+import { Lock, Loader2, ArrowRight, Mail } from 'lucide-react';
 
 const Login: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -65,14 +65,23 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-600/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/5 rounded-full blur-3xl" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-900">
+      
+      {/* Imagem de Fundo com Desfoque */}
+      <div 
+        className="absolute inset-0 z-0 transform scale-105"
+        style={{
+          backgroundImage: `url('https://images.unsplash.com/photo-1532509176319-943cc979c3d9?q=80&w=2670&auto=format&fit=crop')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'blur(5px) brightness(0.65)' // Desfoque e leve escurecimento para contraste
+        }}
+      />
 
-      <div className="bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-slate-200 relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      <div className="bg-white/95 backdrop-blur-md p-8 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-white/50 relative z-10 animate-in fade-in zoom-in-95 duration-700">
         
         <div className="flex flex-col items-center mb-10">
-          <div className="w-24 h-24 bg-white border-2 border-[#0047AB] rounded-2xl flex flex-col items-center justify-center p-2 mb-6 shadow-xl shadow-blue-500/10">
+          <div className="w-24 h-24 bg-white border-2 border-[#0047AB] rounded-2xl flex flex-col items-center justify-center p-2 mb-6 shadow-xl shadow-blue-900/10">
             <div className="flex items-center gap-1 mt-1">
               <span className="text-[#0047AB] font-black text-4xl leading-none">S</span>
               <div className="w-2 h-1.5 bg-[#0047AB] rounded-sm mt-1"></div>
@@ -81,7 +90,7 @@ const Login: React.FC = () => {
             <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Corporativo</p>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Corporativo</p>
         </div>
 
         <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
