@@ -3,7 +3,6 @@ import { supabase } from '../integrations/supabase/client';
 import { Lock, Loader2, ArrowRight, Mail } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,40 +21,15 @@ const Login: React.FC = () => {
     const email = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}${DOMAIN_SUFFIX}`;
 
     try {
-      if (isLogin) {
-        // LOGIN
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
-      } else {
-        // CADASTRO (apenas se permitido publicamente, senão deve ser via admin)
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: username.toUpperCase(),
-            }
-          }
-        });
-        if (error) throw error;
-        
-        if (data.user && !data.session) {
-          setError("Cadastro realizado! Aguarde a aprovação do administrador.");
-        } else if (data.user) {
-          alert("Acesso registrado com sucesso!");
-        }
-      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
     } catch (err: any) {
       console.error(err);
       if (err.message.includes("Invalid login")) {
         setError("E-mail/ID ou senha incorretos.");
-      } else if (err.message.includes("already registered")) {
-        setError("Este acesso já existe.");
-      } else if (err.message.includes("Password should be")) {
-        setError("A senha deve ter pelo menos 6 caracteres.");
       } else {
         setError("Erro ao autenticar. Verifique suas credenciais.");
       }
@@ -90,22 +64,7 @@ const Login: React.FC = () => {
             <span className="text-[#0047AB] font-bold text-[8px] uppercase tracking-wider transform scale-x-110 mt-1">Agropecuária</span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic">SH Oliveira</h1>
-          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Corporativo</p>
-        </div>
-
-        <div className="flex p-1 bg-slate-100 rounded-2xl mb-8">
-          <button 
-            onClick={() => { setIsLogin(true); setError(null); }}
-            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Acessar Painel
-          </button>
-          <button 
-            onClick={() => { setIsLogin(false); setError(null); }}
-            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${!isLogin ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Solicitar Acesso
-          </button>
+          <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Acesso Corporativo Restrito</p>
         </div>
         
         <form onSubmit={handleAuth} className="space-y-6">
@@ -156,7 +115,7 @@ const Login: React.FC = () => {
               <Loader2 className="animate-spin" size={20} />
             ) : (
               <>
-                {isLogin ? 'Entrar no Sistema' : 'Solicitar Registro'}
+                Entrar no Sistema
                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
               </>
             )}
