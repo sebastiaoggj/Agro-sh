@@ -90,6 +90,18 @@ export interface OSItem {
   leftover?: number;
 }
 
+// Novo tipo para Eventos
+export interface OSEvent {
+  id: string;
+  orderId: string;
+  eventType: 'START' | 'PARTIAL' | 'ADDITION' | 'FINISH';
+  eventDate: string;
+  areaDone: number;
+  description?: string;
+  itemsData?: any; // JSON com detalhes de insumos
+  user?: string;
+}
+
 export interface ServiceOrder {
   id: string;
   orderNumber: string;
@@ -124,6 +136,7 @@ export interface ServiceOrder {
   items: OSItem[];
   status: OrderStatus;
   totalArea: number;
+  executedArea?: number; // Novo campo
   totalVolume: number; // Agora pode representar Total KG
   observations?: string;
 }

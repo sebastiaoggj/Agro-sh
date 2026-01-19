@@ -24,7 +24,8 @@ import {
   Beaker,
   Tractor,
   ChevronUp,
-  RefreshCcw
+  RefreshCcw,
+  Activity
 } from 'lucide-react';
 import { OrderStatus, ServiceOrder, Insumo, Harvest } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -104,6 +105,8 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [orderToPrint, setOrderToPrint] = useState<ServiceOrder | null>(null);
+  const [timelineOrder, setTimelineOrder] = useState<ServiceOrder | null>(null);
+  const [timelineEvents, setTimelineEvents] = useState<any[]>([]);
   
   // Advanced Filter States
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -136,7 +139,18 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     fetchHarvests();
   }, []);
 
-  // Extract unique options from orders for dropdowns
+  const handleOpenTimeline = async (order: ServiceOrder) => {
+    setTimelineOrder(order);
+    const { data } = await supabase
+      .from('service_order_events')
+      .select('*')
+      .eq('order_id', order.id)
+      .order('event_date', { ascending: true });
+    
+    setTimelineEvents(data || []);
+  };
+
+  // ... (Keep existing Filter Logic)
   const filterOptions = useMemo(() => {
     const farms = new Set<string>();
     const fields = new Set<string>();
@@ -228,6 +242,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       "Cultura",
       "Safra",
       "Área Total (ha)",
+      "Executado (ha)",
       "Volume Total",
       "Custo Estimado (R$)",
       "Status",
@@ -248,6 +263,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
           order.culture,
           `"${harvestName}"`,
           order.totalArea.toString().replace('.', ','),
+          (order.executedArea || 0).toString().replace('.', ','),
           order.totalVolume.toString().replace('.', ','),
           totalCost.toFixed(2).replace('.', ','),
           order.status,
@@ -257,7 +273,6 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       })
     ];
 
-    // Adiciona BOM para o Excel reconhecer acentuação corretamente
     const csvString = '\uFEFF' + csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -294,10 +309,10 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
 
   return (
     <>
-      {/* Print Layout - Outside of the hidden container */}
+      {/* Print Layout */}
       {orderToPrint && <OSPrintLayout order={orderToPrint} />}
 
-      {/* Main Content - Hidden when printing */}
+      {/* Main Content */}
       <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 relative print:hidden">
         {/* Backdrop for menu */}
         {activeMenuId && (
@@ -332,6 +347,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
         {/* Advanced Filters Panel */}
         {isFiltersOpen && (
           <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-lg animate-in slide-in-from-top-4 z-20">
+            {/* ... Existing Filters JSX ... */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3 text-slate-400">
                 <Filter size={20} />
@@ -489,7 +505,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                     const totalCost = calculateTotalCost(order);
                     
                     return (
-                      <tr key={order.id} className="hover:bg-slate-50/50 transition-all group">
+                      <tr key={order.id} className="hover:bg-slate-50/50 transition-all group cursor-pointer" onClick={() => handleOpenTimeline(order)}>
                         <td className="px-6 py-8">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
@@ -557,20 +573,20 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                             <div className="absolute right-12 top-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl w-56 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                               <div className="p-1.5 space-y-0.5">
                                 <button 
-                                  onClick={() => handlePrint(order)}
+                                  onClick={(e) => { e.stopPropagation(); handlePrint(order); }}
                                   className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
                                 >
                                   <Printer size={16} /> Imprimir OS
                                 </button>
                                 <button 
-                                  onClick={() => { onEdit(order); setActiveMenuId(null); }}
+                                  onClick={(e) => { e.stopPropagation(); onEdit(order); setActiveMenuId(null); }}
                                   className="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
                                 >
                                   <Edit size={16} /> Editar Dados
                                 </button>
                                 <div className="h-px bg-slate-100 mx-2 my-1" />
                                 <button 
-                                  onClick={() => { if(confirm('Excluir esta ordem?')) onDelete(order.id); }}
+                                  onClick={(e) => { e.stopPropagation(); if(confirm('Excluir esta ordem?')) onDelete(order.id); }}
                                   className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 hover:text-red-600 rounded-xl transition-colors text-[11px] font-black uppercase tracking-widest"
                                 >
                                   <Trash2 size={16} /> Excluir Registro
@@ -601,6 +617,84 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
           </div>
         </div>
       </div>
+
+      {/* Timeline Modal */}
+      {timelineOrder && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden p-10 space-y-8 animate-in zoom-in-95 border border-white max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center shrink-0">
+               <div>
+                 <h3 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase">Detalhes da Operação</h3>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Histórico de execução - #{timelineOrder.orderNumber}</p>
+               </div>
+               <button onClick={() => setTimelineOrder(null)} className="text-slate-300 hover:text-red-500 transition-colors"><X size={28} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+              {timelineEvents.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 font-bold uppercase text-xs">Nenhum evento registrado</div>
+              ) : (
+                <div className="relative pl-8 border-l-2 border-slate-100 space-y-8">
+                  {timelineEvents.map((ev, idx) => (
+                    <div key={idx} className="relative">
+                      <div className={`absolute -left-[37px] top-0 w-4 h-4 rounded-full border-2 border-white shadow-sm ${
+                        ev.event_type === 'START' ? 'bg-blue-500' :
+                        ev.event_type === 'PARTIAL' ? 'bg-emerald-500' :
+                        ev.event_type === 'ADDITION' ? 'bg-amber-500' : 'bg-slate-900'
+                      }`} />
+                      
+                      <div className="flex justify-between items-start mb-1">
+                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                          ev.event_type === 'START' ? 'bg-blue-50 text-blue-600' :
+                          ev.event_type === 'PARTIAL' ? 'bg-emerald-50 text-emerald-600' :
+                          ev.event_type === 'ADDITION' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {ev.event_type === 'START' ? 'INÍCIO' :
+                           ev.event_type === 'PARTIAL' ? 'EXECUÇÃO PARCIAL' :
+                           ev.event_type === 'ADDITION' ? 'ADITIVO DE MATERIAL' : 'FINALIZAÇÃO'}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400">
+                          {new Date(ev.event_date).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+                      
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-slate-700 text-xs">
+                        <p className="font-bold mb-1">{ev.description || 'Sem descrição'}</p>
+                        
+                        {ev.event_type === 'PARTIAL' && (
+                          <p className="text-emerald-600 font-black">+ {Number(ev.area_done).toFixed(2)} ha Realizados</p>
+                        )}
+
+                        {ev.event_type === 'ADDITION' && ev.items_data && Array.isArray(ev.items_data) && (
+                          <div className="mt-2 space-y-1 border-t border-slate-200 pt-2">
+                            {ev.items_data.map((item: any, i: number) => (
+                              <div key={i} className="flex justify-between text-[10px] font-bold text-amber-700">
+                                <span>{item.name}</span>
+                                <span>+{item.qty}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {ev.event_type === 'FINISH' && ev.items_data && Object.keys(ev.items_data).length > 0 && (
+                           <div className="mt-2 space-y-1 border-t border-slate-200 pt-2">
+                             <p className="text-[9px] font-black text-slate-400 uppercase">Sobras devolvidas:</p>
+                             {Object.entries(ev.items_data).map(([key, val], i) => (
+                               <div key={i} className="text-[10px] font-bold text-emerald-600">
+                                 Item ID ...{key.substring(0,4)}: {String(val)} un
+                               </div>
+                             ))}
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

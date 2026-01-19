@@ -22,7 +22,10 @@ import {
   ChevronRight,
   PackageCheck,
   Undo2,
-  ShoppingCart
+  ShoppingCart,
+  CalendarPlus,
+  PlusCircle,
+  Clock
 } from 'lucide-react';
 import { ServiceOrder, OrderStatus, OperationType } from '../types';
 
@@ -33,9 +36,20 @@ interface OSCardProps {
   onEditClick: (order: ServiceOrder) => void;
   onCancelClick: (order: ServiceOrder) => void;
   onMakePurchaseClick: (order: ServiceOrder) => void;
+  onPartialClick: (order: ServiceOrder) => void;
+  onAdditionClick: (order: ServiceOrder) => void;
 }
 
-const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick, onEditClick, onCancelClick, onMakePurchaseClick }) => {
+const OSCard: React.FC<OSCardProps> = ({ 
+  order, 
+  onStatusChange, 
+  onFinalizeClick, 
+  onEditClick, 
+  onCancelClick, 
+  onMakePurchaseClick,
+  onPartialClick,
+  onAdditionClick
+}) => {
   const getStatusBadgeStyle = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.EMITTED: return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -64,6 +78,8 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
 
   // Safe check for type since DB might have nulls for old records
   const opType = order.operationType || 'PULVERIZACAO';
+  const executed = order.executedArea || 0;
+  const progress = (executed / (order.totalArea || 1)) * 100;
 
   return (
     <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 space-y-5 group relative overflow-hidden text-slate-900">
@@ -116,49 +132,64 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
           </div>
         </div>
       </div>
+
+      {/* Barra de Progresso Real */}
+      {order.status === OrderStatus.IN_PROGRESS && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
+            <span className="text-emerald-600">Realizado: {executed.toFixed(1)} ha</span>
+            <span className="text-slate-400">{progress.toFixed(0)}%</span>
+          </div>
+          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <div className={`p-2.5 rounded-2xl border ${opType === 'PLANTIO' ? 'bg-emerald-50 text-emerald-500 border-emerald-100' : opType === 'ADUBACAO' ? 'bg-orange-50 text-orange-500 border-orange-100' : 'bg-blue-50 text-blue-500 border-blue-100'}`}>
           {getTypeIcon(opType)}
         </div>
         <span className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] italic">{getTypeName(opType)}</span>
       </div>
-      <div className="grid grid-cols-3 gap-3 pt-2">
-        {/* Lógica de Botões Principais */}
-        
-        {/* Caso 1: Ordem Emitida (Pronta para iniciar) */}
+      <div className="grid grid-cols-3 gap-2 pt-2">
+        {/* Caso 1: Emitida */}
         {order.status === OrderStatus.EMITTED && (
-           <button onClick={() => onStatusChange(order.id, OrderStatus.IN_PROGRESS)} className="bg-[#f26522] hover:bg-orange-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
-             <Play size={16} fill="currentColor" /> Iniciar
+           <button onClick={() => onStatusChange(order.id, OrderStatus.IN_PROGRESS)} className="col-span-3 bg-[#f26522] hover:bg-orange-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
+             <Play size={16} fill="currentColor" /> Iniciar Aplicação
            </button>
         )}
 
-        {/* Caso 2: Aguardando Produto (Fazer Pedido) */}
+        {/* Caso 2: Aguardando Produto */}
         {order.status === OrderStatus.AWAITING_PRODUCT && (
-           <button onClick={() => onMakePurchaseClick(order)} className="bg-amber-400 hover:bg-amber-500 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95 shadow-amber-500/20">
-             <ShoppingCart size={16} /> Comprar
+           <button onClick={() => onMakePurchaseClick(order)} className="col-span-3 bg-amber-400 hover:bg-amber-500 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95 shadow-amber-500/20">
+             <ShoppingCart size={16} /> Comprar Insumos
            </button>
         )}
 
-        {/* Botões Secundários (Editar/Cancelar) para Emitida ou Aguardando */}
+        {/* Botões Secundários */}
         {(order.status === OrderStatus.EMITTED || order.status === OrderStatus.AWAITING_PRODUCT) && (
-          <>
-            <button onClick={() => onEditClick(order)} className="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all active:scale-95 shadow-sm">
-              <Edit3 size={16} /> Editar
+          <div className="col-span-3 grid grid-cols-2 gap-2 mt-2">
+            <button onClick={() => onEditClick(order)} className="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black transition-all active:scale-95 shadow-sm">
+              <Edit3 size={14} /> Editar
             </button>
-            <button onClick={() => onCancelClick(order)} className="bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all active:scale-95 shadow-sm">
-              <XCircle size={16} />
+            <button onClick={() => onCancelClick(order)} className="bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 py-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black transition-all active:scale-95 shadow-sm">
+              <XCircle size={14} /> Cancelar
             </button>
-          </>
+          </div>
         )}
 
-        {/* Caso 3: Em Aplicação */}
+        {/* Caso 3: Em Aplicação (Novos Botões) */}
         {order.status === OrderStatus.IN_PROGRESS && (
           <>
-            <button onClick={() => onFinalizeClick(order)} className="col-span-2 bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all shadow-lg active:scale-95">
-              <CheckCircle2 size={16} /> Finalizar
+            <button onClick={() => onPartialClick(order)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-[9px] font-black transition-all active:scale-95" title="Apontar Parcial">
+              <CalendarPlus size={18} /> PARCIAL
             </button>
-            <button onClick={() => onCancelClick(order)} className="bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 py-4 rounded-2xl flex items-center justify-center gap-2 text-[11px] font-black transition-all active:scale-95">
-              <XCircle size={16} />
+            <button onClick={() => onAdditionClick(order)} className="bg-amber-50 hover:bg-amber-100 text-amber-600 border border-amber-200 py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-[9px] font-black transition-all active:scale-95" title="Aditivo de Material">
+              <PlusCircle size={18} /> ADITIVO
+            </button>
+            <button onClick={() => onFinalizeClick(order)} className="bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl flex flex-col items-center justify-center gap-1 text-[9px] font-black transition-all active:scale-95 shadow-md shadow-emerald-500/20" title="Finalizar Ordem">
+              <CheckCircle2 size={18} /> FINALIZAR
             </button>
           </>
         )}
@@ -167,7 +198,7 @@ const OSCard: React.FC<OSCardProps> = ({ order, onStatusChange, onFinalizeClick,
   );
 };
 
-const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatusChange, onFinalizeClick, onEditOrder, onCancelOrder, onMakePurchaseClick }) => (
+const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatusChange, onFinalizeClick, onEditOrder, onCancelOrder, onMakePurchaseClick, onPartialClick, onAdditionClick }) => (
   <div className="flex flex-col h-full min-w-[380px] max-w-[440px] bg-slate-50/50 rounded-[2.5rem] p-4 border border-slate-100 text-slate-900">
     <div className="flex items-center justify-between mb-6 px-6 py-4 bg-white/50 backdrop-blur rounded-3xl border border-white/50 shadow-sm">
       <div className="flex items-center gap-3">
@@ -188,6 +219,8 @@ const KanbanColumn: React.FC<any> = ({ title, count, totalArea, orders, onStatus
           onEditClick={onEditOrder} 
           onCancelClick={onCancelOrder}
           onMakePurchaseClick={onMakePurchaseClick}
+          onPartialClick={onPartialClick}
+          onAdditionClick={onAdditionClick}
         />
       ))}
       {orders.length === 0 && <div className="bg-white/40 border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center flex flex-col items-center justify-center gap-5"><Layers size={56} className="text-slate-200" /><p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">Painel Vazio</p></div>}
@@ -202,13 +235,31 @@ interface OSKanbanProps {
   onCreateOrder: () => void;
   onDeleteOrder: (id: string) => void;
   onMakePurchaseClick: (order: ServiceOrder) => void;
+  onRegisterPartial: (orderId: string, date: string, area: number, description: string) => void;
+  onRegisterAddition: (orderId: string, items: {insumoId: string, qty: number}[], description: string) => void;
 }
 
-const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder, onDeleteOrder, onMakePurchaseClick }) => {
+const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder, onCreateOrder, onDeleteOrder, onMakePurchaseClick, onRegisterPartial, onRegisterAddition }) => {
   const [finalizeModalOpen, setFinalizeModalOpen] = useState(false);
+  const [partialModalOpen, setPartialModalOpen] = useState(false);
+  const [additionModalOpen, setAdditionModalOpen] = useState(false);
+  
   const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
   const [hasLeftovers, setHasLeftovers] = useState<boolean | null>(null);
   const [leftoverInputs, setLeftoverInputs] = useState<Record<string, number>>({});
+
+  // States para Parcial
+  const [partialData, setPartialData] = useState({ date: new Date().toISOString().split('T')[0], area: '', description: '' });
+  
+  // States para Aditivo
+  const [additionData, setAdditionData] = useState({ 
+    description: '', 
+    items: [] as {insumoId: string, qty: number, name: string, unit: string}[] 
+  });
+  const [selectedAddItem, setSelectedAddItem] = useState('');
+  const [addQty, setAddQty] = useState('');
+
+  // --- Handlers ---
 
   const handleFinalizeClick = (order: ServiceOrder) => {
     setSelectedOrder(order);
@@ -217,9 +268,54 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
     setLeftoverInputs({});
   };
 
-  const closeFinalizeModal = () => {
+  const handlePartialClick = (order: ServiceOrder) => {
+    setSelectedOrder(order);
+    setPartialData({ date: new Date().toISOString().split('T')[0], area: '', description: '' });
+    setPartialModalOpen(true);
+  };
+
+  const handleAdditionClick = (order: ServiceOrder) => {
+    setSelectedOrder(order);
+    setAdditionData({ description: '', items: [] });
+    setAdditionModalOpen(true);
+  };
+
+  const closeModals = () => {
     setFinalizeModalOpen(false);
+    setPartialModalOpen(false);
+    setAdditionModalOpen(false);
     setSelectedOrder(null);
+  };
+
+  const confirmPartial = () => {
+    if (selectedOrder && partialData.area) {
+      onRegisterPartial(selectedOrder.id, partialData.date, Number(partialData.area), partialData.description);
+      closeModals();
+    }
+  };
+
+  const addAdditionItem = () => {
+    if (!selectedOrder || !selectedAddItem || !addQty) return;
+    const itemRef = selectedOrder.items.find(i => i.insumoId === selectedAddItem);
+    if (itemRef) {
+      setAdditionData(prev => ({
+        ...prev,
+        items: [...prev.items, { insumoId: selectedAddItem, qty: Number(addQty), name: itemRef.productName, unit: 'UN' }] // Unit simplificado, idealmente viria do item
+      }));
+      setSelectedAddItem('');
+      setAddQty('');
+    }
+  };
+
+  const removeAdditionItem = (idx: number) => {
+    setAdditionData(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }));
+  };
+
+  const confirmAddition = () => {
+    if (selectedOrder && additionData.items.length > 0) {
+      onRegisterAddition(selectedOrder.id, additionData.items, additionData.description);
+      closeModals();
+    }
   };
 
   const handleLeftoverChange = (insumoId: string, val: string) => {
@@ -229,7 +325,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
   const confirmFinalization = () => {
     if (selectedOrder) {
       onUpdateStatus(selectedOrder.id, OrderStatus.COMPLETED, hasLeftovers ? leftoverInputs : undefined);
-      closeFinalizeModal();
+      closeModals();
     }
   };
 
@@ -284,11 +380,14 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
               onEditOrder={onEditOrder} 
               onCancelOrder={(order: ServiceOrder) => onDeleteOrder(order.id)}
               onMakePurchaseClick={onMakePurchaseClick}
+              onPartialClick={handlePartialClick}
+              onAdditionClick={handleAdditionClick}
             />
           ))}
         </div>
       </div>
 
+      {/* Modal: Finalizar */}
       {finalizeModalOpen && selectedOrder && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden p-10 space-y-8 animate-in zoom-in-95 border border-white max-h-[90vh] flex flex-col text-slate-900">
@@ -297,7 +396,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
                  <h3 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase">Finalizar Operação</h3>
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Ordem #{selectedOrder.orderNumber}</p>
                </div>
-               <button onClick={closeFinalizeModal} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
+               <button onClick={closeModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto custom-scrollbar space-y-10 pr-2">
@@ -348,7 +447,7 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
             </div>
 
             <div className="flex gap-6 pt-6 shrink-0 border-t border-slate-50">
-              <button onClick={closeFinalizeModal} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900">Cancelar</button>
+              <button onClick={closeModals} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900">Cancelar</button>
               <button 
                 onClick={confirmFinalization} 
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
@@ -357,6 +456,147 @@ const OSKanban: React.FC<OSKanbanProps> = ({ orders, onUpdateStatus, onEditOrder
                 ENCERRAR E ESTORNAR <ChevronRight size={18} />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Apontamento Parcial */}
+      {partialModalOpen && selectedOrder && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden p-10 space-y-8 animate-in zoom-in-95 border border-white">
+            <div className="flex justify-between items-center">
+               <div>
+                 <h3 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase">Apontamento Parcial</h3>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Registre o avanço diário</p>
+               </div>
+               <button onClick={closeModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={28} /></button>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Data da Execução</label>
+                <input 
+                  type="date" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-black outline-none focus:ring-2 focus:ring-blue-500" 
+                  value={partialData.date}
+                  onChange={(e) => setPartialData({...partialData, date: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Área Realizada (ha)</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    placeholder="0.00"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-black outline-none focus:ring-2 focus:ring-blue-500"
+                    value={partialData.area}
+                    onChange={(e) => setPartialData({...partialData, area: e.target.value})}
+                  />
+                  <div className="absolute right-6 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">HA</div>
+                </div>
+                <p className="text-[9px] font-bold text-slate-400 ml-1">
+                  Restante: {(selectedOrder.totalArea - (selectedOrder.executedArea || 0)).toFixed(2)} ha
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Observações (Opcional)</label>
+                <textarea 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500 resize-none h-24"
+                  placeholder="Detalhes da operação..."
+                  value={partialData.description}
+                  onChange={(e) => setPartialData({...partialData, description: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <button 
+              onClick={confirmPartial} 
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-blue-500/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-3"
+            >
+              <Save size={18} /> Confirmar Parcial
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Aditivo de Material */}
+      {additionModalOpen && selectedOrder && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white rounded-[3rem] w-full max-w-xl shadow-2xl overflow-hidden p-10 space-y-8 animate-in zoom-in-95 border border-white">
+            <div className="flex justify-between items-center">
+               <div>
+                 <h3 className="text-2xl font-black text-slate-900 italic tracking-tighter uppercase">Aditivo de Material</h3>
+                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Adicionar insumo extra (consumo não planejado)</p>
+               </div>
+               <button onClick={closeModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={28} /></button>
+            </div>
+
+            <div className="p-6 bg-amber-50 rounded-[2rem] border border-amber-100">
+              <div className="flex gap-4 items-end">
+                <div className="flex-1 space-y-2">
+                  <label className="text-[9px] font-black uppercase text-amber-600 tracking-widest ml-1">Produto da Ordem</label>
+                  <select 
+                    className="w-full bg-white border border-amber-200 rounded-xl px-4 py-3 text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                    value={selectedAddItem}
+                    onChange={(e) => setSelectedAddItem(e.target.value)}
+                  >
+                    <option value="">Selecione...</option>
+                    {selectedOrder.items.map(i => (
+                      <option key={i.insumoId} value={i.insumoId}>{i.productName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-32 space-y-2">
+                  <label className="text-[9px] font-black uppercase text-amber-600 tracking-widest ml-1">Qtde Extra</label>
+                  <input 
+                    type="number" 
+                    className="w-full bg-white border border-amber-200 rounded-xl px-4 py-3 text-xs font-black text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                    placeholder="0.00"
+                    value={addQty}
+                    onChange={(e) => setAddQty(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={addAdditionItem}
+                  className="bg-amber-500 hover:bg-amber-600 text-white p-3 rounded-xl shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+
+              {additionData.items.length > 0 && (
+                <div className="mt-6 space-y-2">
+                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Itens Adicionados</p>
+                  {additionData.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100">
+                      <span className="text-xs font-bold text-slate-700">{item.name}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-black text-amber-600">+{item.qty}</span>
+                        <button onClick={() => removeAdditionItem(idx)} className="text-slate-300 hover:text-red-500"><X size={14} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Motivo do Aditivo</label>
+              <textarea 
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 font-bold text-xs outline-none focus:ring-2 focus:ring-amber-500 resize-none h-20"
+                placeholder="Ex: Vazamento, erro de calibração, repasse..."
+                value={additionData.description}
+                onChange={(e) => setAdditionData({...additionData, description: e.target.value})}
+              />
+            </div>
+
+            <button 
+              onClick={confirmAddition} 
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-3"
+              disabled={additionData.items.length === 0}
+            >
+              <PackageCheck size={18} /> Confirmar Aditivo (Baixa Estoque)
+            </button>
           </div>
         </div>
       )}
