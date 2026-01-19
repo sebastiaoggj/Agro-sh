@@ -9,7 +9,7 @@ import {
   Printer, Share2, FileText, LayoutDashboard,
   Sparkles, Check, Search as SearchIcon,
   Loader2, FlaskConical, AlertTriangle,
-  PackageX, Sprout, Layers
+  PackageX, Sprout, Layers, PencilRuler
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder, OperationType } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -52,6 +52,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const [stockWarning, setStockWarning] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Estado para controlar a área parcial de cada talhão selecionado
+  // Formato: { 'field_id': area_a_aplicar }
+  const [fieldPartialAreas, setFieldPartialAreas] = useState<Record<string, number>>({});
+
   const [formData, setFormData] = useState({
     id: initialData?.id || '',
     operationType: initialData?.operationType || 'PULVERIZACAO' as OperationType,
@@ -86,6 +90,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
       return { ...i, unit: originalInsumo?.unit || 'L/Kg' };
     }) || []
   );
+
+  // Inicializa as áreas parciais ao carregar ou selecionar fazenda
+  useEffect(() => {
+    // Se estiver editando, tentamos restaurar (embora não tenhamos o detalhe exato salvo no banco simples, 
+    // assumimos full area ou distribuimos se fosse complexo. Aqui vamos defaultar para Full Area para simplificar edição)
+    if (initialData && Object.keys(fieldPartialAreas).length === 0) {
+      const initialMap: Record<string, number> = {};
+      initialData.fieldIds.forEach(fid => {
+        const field = fields.find(f => f.id === fid);
+        if (field) initialMap[fid] = field.area;
+      });
+      setFieldPartialAreas(initialMap);
+    }
+  }, [initialData, fields]);
 
   // Efeito para trocar a frase obrigatória padrão ao mudar o tipo
   useEffect(() => {
@@ -124,9 +142,13 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   // --- LÓGICA DE CÁLCULO UNIFICADA ---
   const stats = useMemo(() => {
-    const area = selectedFields.reduce((sum, f) => sum + f.area, 0);
-    const flow = Number(formData.flowRate) || 0; // Pode ser L/ha ou Kg/ha
-    const tankCap = Number(formData.tankCapacity) || 0; // Pode ser L ou Kg
+    // Agora somamos as áreas parciais definidas pelo usuário
+    const area = formData.fieldIds.reduce((sum, id) => {
+      return sum + (fieldPartialAreas[id] || 0);
+    }, 0);
+
+    const flow = Number(formData.flowRate) || 0; 
+    const tankCap = Number(formData.tankCapacity) || 0; 
     
     const totalVolume = area * flow;
     const haPerTank = flow > 0 ? tankCap / flow : 0;
@@ -139,7 +161,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCap) : 0;
 
     return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume, totalRefills };
-  }, [selectedFields, formData.flowRate, formData.tankCapacity]);
+  }, [formData.fieldIds, fieldPartialAreas, formData.flowRate, formData.tankCapacity]);
 
   useEffect(() => {
     if (selectedMachine && !initialData) {
@@ -171,6 +193,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const { name, value } = e.target;
     if (name === 'farmId') {
       setFormData(prev => ({ ...prev, farmId: value, fieldIds: [] }));
+      setFieldPartialAreas({}); // Limpa áreas
       setItems([]); 
     } else if (name === 'culture') {
       setFormData(prev => ({ ...prev, culture: value, variety: '' }));
@@ -179,15 +202,34 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
   };
 
-  const toggleField = (fieldId: string) => {
+  const toggleField = (fieldId: string, maxArea: number) => {
     setFormData(prev => {
       const isSelected = prev.fieldIds.includes(fieldId);
       if (isSelected) {
+        // Remover
+        const newPartial = { ...fieldPartialAreas };
+        delete newPartial[fieldId];
+        setFieldPartialAreas(newPartial);
         return { ...prev, fieldIds: prev.fieldIds.filter(id => id !== fieldId) };
       } else {
+        // Adicionar (com área total como padrão)
+        setFieldPartialAreas(prevAreas => ({ ...prevAreas, [fieldId]: maxArea }));
         return { ...prev, fieldIds: [...prev.fieldIds, fieldId] };
       }
     });
+  };
+
+  const handlePartialAreaChange = (fieldId: string, value: string, maxArea: number) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue < 0) return;
+    
+    // Opcional: Impedir que seja maior que a área total do talhão?
+    // Vamos permitir flexibilidade (talvez o cadastro esteja errado), mas visualmente indicar
+    
+    setFieldPartialAreas(prev => ({
+      ...prev,
+      [fieldId]: numValue
+    }));
   };
 
   const addProduct = () => {
@@ -263,6 +305,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }
     if (!formData.flowRate || formData.flowRate <= 0) {
       alert("Por favor, informe a Vazão/Dosagem para calcular o volume total.");
+      return;
+    }
+    if (stats.area <= 0) {
+      alert("A área total da aplicação deve ser maior que zero.");
       return;
     }
 
@@ -632,7 +678,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
             
             <div className="space-y-2" ref={dropdownRef}>
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Talhão de Alocação</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Talhão / Área Aplicada</label>
               <div className="relative">
                 <div 
                   className={`w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer flex justify-between items-center ${!formData.farmId ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -640,10 +686,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 >
                   <span className={formData.fieldIds.length === 0 ? 'text-slate-400' : 'text-slate-900 uppercase'}>
                     {formData.fieldIds.length === 0 
-                      ? 'BUSCAR TALHÃO...' 
-                      : formData.fieldIds.length === 1 
-                        ? selectedFields[0]?.name 
-                        : `${formData.fieldIds.length} TALHÕES`}
+                      ? 'SELECIONAR ÁREAS...' 
+                      : `${stats.area.toFixed(2)} HA SELECIONADOS`}
                   </span>
                   <ChevronDown size={18} className={`text-slate-400 transition-transform ${isFieldDropdownOpen ? 'rotate-180' : ''}`} />
                 </div>
@@ -655,28 +699,50 @@ const OrderForm: React.FC<OrderFormProps> = ({
                       <input type="text" placeholder="Filtrar talhão..." className="bg-transparent border-none text-[10px] font-black uppercase tracking-widest text-slate-900 outline-none w-full" />
                     </div>
                     <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                      {availableFields.map(f => (
-                        <div 
-                          key={f.id} 
-                          className={`px-6 py-4 flex items-center justify-between cursor-pointer transition-all hover:bg-slate-50 ${formData.fieldIds.includes(f.id) ? 'bg-emerald-50' : ''}`}
-                          onClick={() => toggleField(f.id)}
-                        >
-                          <div className="flex flex-col">
-                            <span className="text-xs font-black text-slate-900 uppercase">{f.name}</span>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{f.area} HA</span>
+                      {availableFields.map(f => {
+                        const isSelected = formData.fieldIds.includes(f.id);
+                        return (
+                          <div 
+                            key={f.id} 
+                            className={`px-6 py-4 border-b border-slate-50 last:border-none transition-all ${isSelected ? 'bg-emerald-50/50' : 'hover:bg-slate-50'}`}
+                          >
+                            <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleField(f.id, f.area)}>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-black text-slate-900 uppercase">{f.name}</span>
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total: {f.area} HA</span>
+                              </div>
+                              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${isSelected ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}>
+                                {isSelected && <Check size={14} strokeWidth={3} />}
+                              </div>
+                            </div>
+                            
+                            {/* Input de Área Parcial */}
+                            {isSelected && (
+                              <div className="mt-3 flex items-center gap-3 animate-in slide-in-from-top-1">
+                                <div className="flex-1 relative">
+                                  <PencilRuler size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500" />
+                                  <input 
+                                    type="number" 
+                                    className="w-full bg-white border border-emerald-200 rounded-xl pl-8 pr-3 py-2 text-xs font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                                    value={fieldPartialAreas[f.id] || ''}
+                                    onChange={(e) => handlePartialAreaChange(f.id, e.target.value, f.area)}
+                                    placeholder="Área Aplicada"
+                                    onClick={(e) => e.stopPropagation()} // Impede fechar/toggle ao clicar no input
+                                  />
+                                </div>
+                                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">HA</span>
+                              </div>
+                            )}
                           </div>
-                          {formData.fieldIds.includes(f.id) && (
-                            <Check size={16} className="text-emerald-500" strokeWidth={3} />
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                       {availableFields.length === 0 && (
                          <div className="px-6 py-10 text-center text-[10px] font-black uppercase text-slate-300">Nenhum talhão</div>
                       )}
                     </div>
                     {formData.fieldIds.length > 0 && (
                       <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-center">
-                        <button onClick={() => setIsFieldDropdownOpen(false)} className="text-[9px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Concluir</button>
+                        <button onClick={() => setIsFieldDropdownOpen(false)} className="text-[9px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700">Concluir Seleção</button>
                       </div>
                     )}
                   </div>
