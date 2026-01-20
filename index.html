@@ -5,45 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SH Oliveira - Sistema de Gestão</title>
     
-    <!-- Polyfills Críticos -->
+    <!-- Polyfills de Compatibilidade -->
     <script>
       window.global = window;
-      window.process = { env: { NODE_ENV: 'production' }, version: '', nextTick: function(cb) { setTimeout(cb, 0); } };
+      window.process = { env: { NODE_ENV: 'production' }, version: '' };
     </script>
 
-    <!-- SISTEMA DE EMERGÊNCIA DE ERROS -->
+    <!-- TRATAMENTO DE ERRO DE INICIALIZAÇÃO -->
     <script>
       window.onerror = function(message, source, lineno, colno, error) {
-        var errorContainer = document.getElementById('error-overlay');
-        if (!errorContainer) {
-          errorContainer = document.createElement('div');
-          errorContainer.id = 'error-overlay';
-          errorContainer.style.position = 'fixed';
-          errorContainer.style.top = '0';
-          errorContainer.style.left = '0';
-          errorContainer.style.width = '100%';
-          errorContainer.style.height = '100%';
-          errorContainer.style.backgroundColor = '#fff';
-          errorContainer.style.color = '#e11d48';
-          errorContainer.style.padding = '20px';
-          errorContainer.style.zIndex = '9999';
-          errorContainer.style.overflow = 'auto';
-          errorContainer.style.fontFamily = 'monospace';
-          errorContainer.innerHTML = '<h1>Erro Crítico de Inicialização</h1>';
-          document.body.appendChild(errorContainer);
-        }
-        var errorMessage = document.createElement('div');
-        errorMessage.style.marginBottom = '20px';
-        errorMessage.style.borderBottom = '1px solid #ccc';
-        errorMessage.style.paddingBottom = '10px';
-        errorMessage.innerHTML = '<strong>Erro:</strong> ' + message + '<br>' +
-                                 '<strong>Arquivo:</strong> ' + source + ':' + lineno + '<br>' +
-                                 '<pre>' + (error && error.stack ? error.stack : 'Sem stacktrace') + '</pre>';
-        errorContainer.appendChild(errorMessage);
+        console.error("Critical Error:", message, error);
         
-        // Remove loading spinner se existir
+        // Garante que existe um body para mostrar o erro
+        if (!document.body) {
+            document.write('<body></body>');
+        }
+
+        var overlay = document.getElementById('error-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.id = 'error-overlay';
+          overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;color:#e11d48;padding:20px;z-index:99999;font-family:monospace;overflow:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:left;';
+          document.body.appendChild(overlay);
+        }
+
+        var content = '<div style="max-width:800px;border:2px solid #e11d48;padding:20px;border-radius:10px;background:#fff1f2;">' +
+          '<h2 style="margin-top:0">Erro Crítico de Inicialização</h2>' +
+          '<p><strong>Erro:</strong> ' + message + '</p>' +
+          '<p><strong>Arquivo:</strong> ' + (source || 'Desconhecido') + ':' + (lineno || 0) + '</p>' +
+          '<pre style="background:#000;color:#0f0;padding:10px;border-radius:5px;overflow:auto;margin-top:10px;">' + (error && error.stack ? error.stack : 'Sem stacktrace disponível') + '</pre>' +
+          '<button onclick="window.location.reload()" style="margin-top:20px;padding:10px 20px;background:#e11d48;color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold;">Tentar Recarregar</button>' +
+          '</div>';
+        
+        overlay.innerHTML = content;
+        
+        // Esconde o loader se existir
         var loader = document.getElementById('app-loader');
-        if(loader) loader.style.display = 'none';
+        if (loader) loader.style.display = 'none';
       };
     </script>
 
@@ -64,14 +62,9 @@
     </script>
     <style>
       body { transition: background-color 0.3s ease, color 0.3s ease; overflow: hidden; }
-      @media print {
-        @page { margin: 10mm; size: auto; }
-        html, body { visibility: hidden; height: auto !important; overflow: visible !important; background: white !important; }
-        #root { visibility: visible; height: auto !important; overflow: visible !important; }
-        ::-webkit-scrollbar { display: none; }
-        .print\:block { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; }
-        .print\:hidden { display: none !important; }
-      }
+      /* Previne FOUC (Flash of Unstyled Content) */
+      #root:empty::before { content: ""; } 
+      
       .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -79,16 +72,16 @@
       .dark ::-webkit-scrollbar-track { background: transparent; }
       .dark ::-webkit-scrollbar-thumb { background: #1e293b; }
       @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes spin { to { transform: rotate(360deg); } }
     </style>
   </head>
   <body class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
     <div id="root">
-      <!-- Loading State Inicial -->
-      <div id="app-loader" style="display: flex; height: 100vh; align-items: center; justify-content: center; background-color: #f1f5f9; color: #64748b; font-family: sans-serif; flex-direction: column; gap: 16px;">
+      <!-- Loading State: Se este elemento sumir e nada aparecer, o React travou. Se ele ficar para sempre, o JS travou. -->
+      <div id="app-loader" style="display: flex; height: 100vh; align-items: center; justify-content: center; background-color: #f1f5f9; color: #64748b; font-family: sans-serif; flex-direction: column; gap: 16px; position: absolute; top:0; left:0; width:100%; z-index: 50;">
         <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-        <span style="font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;">Iniciando Sistema...</span>
+        <span style="font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;">Carregando Sistema...</span>
       </div>
-      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
     </div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
