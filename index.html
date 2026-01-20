@@ -4,6 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SH Oliveira - Sistema de Gestão</title>
+    
+    <!-- Global Error Handler: Mostra erros na tela se o React falhar -->
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        var errorDiv = document.getElementById('global-error-overlay');
+        if (!errorDiv) {
+          errorDiv = document.createElement('div');
+          errorDiv.id = 'global-error-overlay';
+          errorDiv.style.position = 'fixed';
+          errorDiv.style.top = '0';
+          errorDiv.style.left = '0';
+          errorDiv.style.width = '100%';
+          errorDiv.style.height = '100%';
+          errorDiv.style.backgroundColor = '#fff';
+          errorDiv.style.zIndex = '9999';
+          errorDiv.style.padding = '20px';
+          errorDiv.style.overflow = 'auto';
+          errorDiv.style.fontFamily = 'monospace';
+          errorDiv.innerHTML = '<h2 style="color:red">Erro Crítico de Inicialização</h2>';
+          document.body.appendChild(errorDiv);
+        }
+        errorDiv.innerHTML += '<div style="background:#fee; color:#b00; padding:10px; margin-bottom:10px; border:1px solid #fcc; border-radius:4px;">' +
+          '<strong>Message:</strong> ' + message + '<br>' +
+          '<strong>Source:</strong> ' + source + ':' + lineno + '<br>' +
+          '<strong>Error:</strong> ' + (error ? error.stack : 'N/A') +
+          '</div>';
+      };
+      
+      window.onunhandledrejection = function(event) {
+        window.onerror('Unhandled Promise Rejection: ' + event.reason, '', 0, 0, event.reason);
+      };
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,12 +81,10 @@
           overflow: visible !important;
         }
 
-        /* Esconde barras de rolagem na impressão */
         ::-webkit-scrollbar {
           display: none;
         }
         
-        /* Garante que o conteúdo de impressão esteja visível e no topo */
         .print\:block {
           visibility: visible;
           position: absolute;
@@ -62,7 +93,6 @@
           width: 100%;
         }
 
-        /* Oculta tudo que não for de impressão */
         .print\:hidden {
           display: none !important;
         }

@@ -13,9 +13,11 @@ export default defineConfig({
       '@': path.resolve(process.cwd(), './src'),
     },
   },
-  // Correção para bibliotecas que usam process.env no navegador
+  // Define 'process' como um objeto vazio globalmente para evitar "ReferenceError: process is not defined"
   define: {
-    'process.env': {}
+    'process': {
+      env: {}
+    }
   },
   build: {
     outDir: 'dist',
