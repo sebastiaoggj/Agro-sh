@@ -13,14 +13,10 @@ export default defineConfig({
       '@': path.resolve(process.cwd(), './src'),
     },
   },
-  // Define 'process' como um objeto vazio globalmente para evitar "ReferenceError: process is not defined"
-  define: {
-    'process': {
-      env: {}
-    }
-  },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    // Garante compatibilidade com browsers mais antigos se necessário
+    target: 'es2020'
   }
 });

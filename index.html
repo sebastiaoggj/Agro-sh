@@ -5,35 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SH Oliveira - Sistema de Gestão</title>
     
-    <!-- Global Error Handler: Mostra erros na tela se o React falhar -->
+    <!-- Polyfills Críticos para produção -->
+    <script>
+      // Evita erros de bibliotecas que esperam Node.js
+      window.global = window;
+      window.process = {
+        env: { NODE_ENV: 'production' },
+        version: '',
+        nextTick: function(cb) { setTimeout(cb, 0); }
+      };
+    </script>
+
+    <!-- Global Error Handler -->
     <script>
       window.onerror = function(message, source, lineno, colno, error) {
-        var errorDiv = document.getElementById('global-error-overlay');
-        if (!errorDiv) {
-          errorDiv = document.createElement('div');
-          errorDiv.id = 'global-error-overlay';
-          errorDiv.style.position = 'fixed';
-          errorDiv.style.top = '0';
-          errorDiv.style.left = '0';
-          errorDiv.style.width = '100%';
-          errorDiv.style.height = '100%';
-          errorDiv.style.backgroundColor = '#fff';
-          errorDiv.style.zIndex = '9999';
-          errorDiv.style.padding = '20px';
-          errorDiv.style.overflow = 'auto';
-          errorDiv.style.fontFamily = 'monospace';
-          errorDiv.innerHTML = '<h2 style="color:red">Erro Crítico de Inicialização</h2>';
-          document.body.appendChild(errorDiv);
-        }
-        errorDiv.innerHTML += '<div style="background:#fee; color:#b00; padding:10px; margin-bottom:10px; border:1px solid #fcc; border-radius:4px;">' +
-          '<strong>Message:</strong> ' + message + '<br>' +
-          '<strong>Source:</strong> ' + source + ':' + lineno + '<br>' +
-          '<strong>Error:</strong> ' + (error ? error.stack : 'N/A') +
-          '</div>';
-      };
-      
-      window.onunhandledrejection = function(event) {
-        window.onerror('Unhandled Promise Rejection: ' + event.reason, '', 0, 0, event.reason);
+        console.error("Global Error:", message, error);
+        // Não mostra overlay em produção para não assustar, mas loga no console
       };
     </script>
 
@@ -63,59 +50,18 @@
       }
       
       @media print {
-        @page {
-          margin: 10mm;
-          size: auto;
-        }
-
-        html, body {
-          visibility: hidden;
-          height: auto !important;
-          overflow: visible !important;
-          background: white !important;
-        }
-
-        #root {
-          visibility: visible;
-          height: auto !important;
-          overflow: visible !important;
-        }
-
-        ::-webkit-scrollbar {
-          display: none;
-        }
-        
-        .print\:block {
-          visibility: visible;
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-        }
-
-        .print\:hidden {
-          display: none !important;
-        }
+        @page { margin: 10mm; size: auto; }
+        html, body { visibility: hidden; height: auto !important; overflow: visible !important; background: white !important; }
+        #root { visibility: visible; height: auto !important; overflow: visible !important; }
+        ::-webkit-scrollbar { display: none; }
+        .print\:block { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; }
+        .print\:hidden { display: none !important; }
       }
       
-      .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      
-      .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 10px;
-      }
-      
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-      }
-
+      .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
       .dark ::-webkit-scrollbar-track { background: transparent; }
       .dark ::-webkit-scrollbar-thumb { background: #1e293b; }
       
@@ -126,7 +72,14 @@
     </style>
   </head>
   <body class="bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Loading State Inicial (aparece antes do React carregar) -->
+      <div style="display: flex; height: 100vh; align-items: center; justify-content: center; background-color: #f1f5f9; color: #64748b; font-family: sans-serif; flex-direction: column; gap: 16px;">
+        <div style="width: 48px; height: 48px; border: 4px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <span style="font-weight: 700; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;">Carregando Sistema...</span>
+      </div>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>
