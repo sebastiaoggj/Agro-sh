@@ -1,5 +1,5 @@
 {
-  "name": "Agro SH - ERP Operacional",
+  "name": "agro-sh-erp-operacional",
   "description": "Sistema de Gestão de Operações Agrícolas com foco em Lean Construction e controle rígido de insumos.",
   "requestFramePermissions": [
     "camera",
