@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ClipboardList, Package, Truck, 
   Map as MapIcon, Calendar, Sprout, ShoppingCart, 
   Beaker, LogOut, RefreshCw, BarChart3, Users,
-  CalendarRange
+  CalendarRange, Menu, X
 } from 'lucide-react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './integrations/supabase/client';
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const [authProcessing, setAuthProcessing] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // UUID válido para operações offline (Nil UUID)
   const [offlineUserId] = useState('00000000-0000-0000-0000-000000000000');
@@ -67,6 +68,23 @@ const App: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
+
+  // Responsividade: Fechar sidebar em telas pequenas ao carregar
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+      }
+    };
+    
+    // Set initial
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // AUTH CHECK
   useEffect(() => {
@@ -256,7 +274,6 @@ const App: React.FC = () => {
   const handleRegisterPartial = async (orderId: string, date: string, area: number, description: string) => {
     const userId = session?.user?.id || offlineUserId;
     try {
-      // 1. Inserir Evento
       await supabase.from('service_order_events').insert({
         order_id: orderId,
         event_type: 'PARTIAL',
@@ -266,7 +283,6 @@ const App: React.FC = () => {
         user_id: userId
       });
 
-      // 2. Atualizar Área Executada na Ordem
       const currentOrder = orders.find(o => o.id === orderId);
       const newExecuted = (currentOrder?.executedArea || 0) + area;
       
@@ -287,7 +303,6 @@ const App: React.FC = () => {
     const userName = userProfile?.full_name || 'Sistema';
     
     try {
-      // 1. Inserir Evento
       await supabase.from('service_order_events').insert({
         order_id: orderId,
         event_type: 'ADDITION',
@@ -296,16 +311,13 @@ const App: React.FC = () => {
         user_id: userId
       });
 
-      // 2. Baixar Estoque e Registrar Histórico
       for (const item of items) {
         const { data: currentInv } = await supabase.from('inventory').select('physical_stock').eq('id', item.insumoId).single();
         if (currentInv) {
-          // Baixa direta
           await supabase.from('inventory').update({
             physical_stock: Math.max(0, Number(currentInv.physical_stock) - Number(item.qty))
           }).eq('id', item.insumoId);
 
-          // Log
           await supabase.from('stock_history').insert({
             inventory_id: item.insumoId,
             type: 'SAIDA',
@@ -325,10 +337,7 @@ const App: React.FC = () => {
     }
   };
 
-  const triggerAutoRelease = async () => {
-    // Lógica existente de liberação automática
-    // ... mantida igual ...
-  };
+  const triggerAutoRelease = async () => {};
 
   const handleSaveServiceOrder = async (order: ServiceOrder): Promise<boolean> => {
     const userId = session?.user?.id || offlineUserId;
@@ -401,7 +410,6 @@ const App: React.FC = () => {
          
          if (error) throw error;
          
-         // Registrar evento START
          await supabase.from('service_order_events').insert({
             order_id: id,
             event_type: 'START',
@@ -419,7 +427,6 @@ const App: React.FC = () => {
            
          if (updateError) throw updateError;
 
-         // Registrar evento FINISH com sobras
          await supabase.from('service_order_events').insert({
             order_id: id,
             event_type: 'FINISH',
@@ -477,7 +484,6 @@ const App: React.FC = () => {
   };
 
   const handleSavePurchaseOrder = async (po: PurchaseOrder) => {
-    // ... mantido ...
     const userId = session?.user?.id || offlineUserId;
     try {
       const payload = {
@@ -504,7 +510,6 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
-    // ... mantido ...
     try {
        if (status === PurchaseOrderStatus.RECEIVED) {
           const { data: po, error: poError } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
@@ -552,7 +557,6 @@ const App: React.FC = () => {
   };
 
   const handleDeletePO = async (id: string) => {
-    // ... mantido ...
     if(!confirm("Excluir?")) return;
     try { await supabase.from('purchase_orders').delete().eq('id', id); fetchAllData(); } catch(e) { alert("Erro."); }
   };
@@ -594,6 +598,13 @@ const App: React.FC = () => {
     );
   }
 
+  // WRAPPER RESPONSIVO: Ajuste de padding aqui
+  const ContentWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <div className="p-4 md:p-8 lg:p-12 h-full overflow-y-auto w-full custom-scrollbar">
+      {children}
+    </div>
+  );
+
   const renderContent = () => {
     try {
       switch (activeTab) {
@@ -608,38 +619,38 @@ const App: React.FC = () => {
             onRegisterPartial={handleRegisterPartial}
             onRegisterAddition={handleRegisterAddition}
           />;
-        case 'calendar': return <div className="p-12 h-full"><CalendarView orders={orders} /></div>;
-        case 'stats': return <div className="p-12 h-full"><StatsView orders={orders} inventory={inventory} /></div>;
-        case 'inventory': return <div className="p-12 h-full"><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></div>;
+        case 'calendar': return <ContentWrapper><CalendarView orders={orders} /></ContentWrapper>;
+        case 'stats': return <ContentWrapper><StatsView orders={orders} inventory={inventory} /></ContentWrapper>;
+        case 'inventory': return <ContentWrapper><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></ContentWrapper>;
         
         case 'master_insumos':
           return effectiveProfile?.can_manage_inputs ? (
-            <div className="p-12 h-full"><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></div>
+            <ContentWrapper><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
         
-        case 'purchases': return <div className="p-12 h-full"><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></div>;
-        case 'orders': return <div className="p-12 h-full"><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></div>;
+        case 'purchases': return <ContentWrapper><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></ContentWrapper>;
+        case 'orders': return <ContentWrapper><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></ContentWrapper>;
         
         case 'fleet': 
           return effectiveProfile?.can_manage_machines ? (
-            <div className="p-12 h-full"><FleetManagement /></div>
+            <ContentWrapper><FleetManagement /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
         
         case 'areas': 
           return effectiveProfile?.can_manage_machines ? (
-            <div className="p-12 h-full"><AreasFields farms={farms} fields={fields} crops={crops} onUpdate={fetchAllData} /></div>
+            <ContentWrapper><AreasFields farms={farms} fields={fields} crops={crops} onUpdate={fetchAllData} /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
         
-        case 'reports': return <div className="p-12 h-full"><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></div>;
+        case 'reports': return <ContentWrapper><Reports orders={orders} inventory={inventory} onEdit={(o) => { setEditingOrder(o); setActiveTab('orders'); }} onDelete={handleDeleteOS} /></ContentWrapper>;
         
         case 'harvests':
           return effectiveProfile?.role === 'admin' ? (
-            <div className="p-12 h-full"><HarvestManagement /></div>
+            <ContentWrapper><HarvestManagement /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
 
         case 'team':
           return effectiveProfile?.can_manage_users ? (
-            <div className="p-12 h-full"><TeamManagement /></div>
+            <ContentWrapper><TeamManagement /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
 
         default: return null;
@@ -668,16 +679,34 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900">
-      <aside className={`bg-white border-r border-slate-200 transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-64' : 'w-20'} print:hidden`}>
+      
+      {/* Mobile Header / Sidebar Toggle */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-50 px-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <SHLogo isSidebarOpen={true} />
+          <span className="font-black text-sm text-slate-900 uppercase italic">SH Oliveira</span>
+        </div>
+        <button onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-slate-600">
+          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Sidebar Desktop & Mobile Overlay */}
+      <aside className={`
+        fixed lg:static top-16 lg:top-0 bottom-0 left-0 z-40 bg-white border-r border-slate-200 transition-all duration-300 flex flex-col
+        ${isMobileMenuOpen ? 'w-64' : 'w-0 lg:w-64'} 
+        ${!isSidebarOpen && 'lg:w-20'} 
+        print:hidden overflow-hidden
+      `}>
         {/* Sidebar Content */}
-        <div className="p-8 flex items-center gap-4">
+        <div className="p-6 md:p-8 flex items-center gap-4">
           <SHLogo isSidebarOpen={isSidebarOpen} />
           {isSidebarOpen && (
-            <div className="flex flex-col">
+            <div className="flex flex-col whitespace-nowrap overflow-hidden">
               <span className="font-black text-lg text-slate-900 leading-none italic uppercase">SH Oliveira</span>
               <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Sistema de Gestão</span>
-              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1">
-                Olá, {effectiveProfile.full_name?.split(' ')[0] || 'Usuário'}
+              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mt-1 truncate">
+                {effectiveProfile.full_name?.split(' ')[0] || 'Usuário'}
               </span>
             </div>
           )}
@@ -687,28 +716,28 @@ const App: React.FC = () => {
           {menuItems.map(item => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all ${activeTab === item.id ? 'bg-slate-100 text-[#10b981] font-black shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+              onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl transition-all whitespace-nowrap ${activeTab === item.id ? 'bg-slate-100 text-[#10b981] font-black shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              <item.icon size={20} />
+              <item.icon size={20} className="shrink-0" />
               {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">{item.label}</span>}
             </button>
           ))}
         </nav>
 
         <div className="p-4 border-t border-slate-100 space-y-2">
-           <button onClick={handleRefresh} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all">
-             <RefreshCw size={20} />
+           <button onClick={handleRefresh} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all whitespace-nowrap">
+             <RefreshCw size={20} className="shrink-0" />
              {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Atualizar</span>}
            </button>
-           <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
-             <LogOut size={20} />
+           <button onClick={handleSignOut} className="w-full flex items-center gap-4 px-4 py-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all whitespace-nowrap">
+             <LogOut size={20} className="shrink-0" />
              {isSidebarOpen && <span className="text-xs font-black uppercase tracking-widest">Sair</span>}
            </button>
         </div>
       </aside>
       
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden mt-16 lg:mt-0">
         <div className={`flex-1 ${activeTab === 'dashboard' ? 'overflow-hidden' : 'overflow-y-auto'} bg-[#f8fafc] h-full`}>
           {renderContent()}
         </div>
