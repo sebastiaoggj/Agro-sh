@@ -106,25 +106,70 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir este insumo do catálogo mestre?")) return;
+    if (!confirm("ATENÇÃO: Ao excluir este insumo do catálogo, ele será removido de TODO o estoque físico em todas as fazendas. O histórico de movimentação também será limpo. Deseja continuar?")) return;
 
+    setLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         alert("Modo Demo: Exclusão simulada.");
+        setLoading(false);
         return;
       }
 
+      // 1. Buscar IDs de inventário associados a este insumo mestre
+      const { data: inventoryItems, error: fetchError } = await supabase
+        .from('inventory')
+        .select('id')
+        .eq('master_insumo_id', id);
+
+      if (fetchError) throw fetchError;
+
+      // 2. Se houver itens no estoque, limpar histórico e o próprio estoque
+      if (inventoryItems && inventoryItems.length > 0) {
+        const invIds = inventoryItems.map(i => i.id);
+        
+        // Limpar histórico (Stock History) associado a esses itens de inventário
+        const { error: historyError } = await supabase
+          .from('stock_history')
+          .delete()
+          .in('inventory_id', invIds);
+        
+        if (historyError) console.error("Aviso: Erro ao limpar histórico (pode já estar limpo ou restrito)", historyError);
+
+        // Limpar o Estoque (Inventory)
+        const { error: inventoryError } = await supabase
+          .from('inventory')
+          .delete()
+          .eq('master_insumo_id', id);
+
+        if (inventoryError) throw new Error("Erro ao remover itens do estoque físico: " + inventoryError.message);
+      }
+
+      // 3. Tentar limpar Pedidos de Compra (Purchase Orders) associados
+      // Isso é opcional, mas evita erro de FK se houver
+      const { error: poError } = await supabase
+        .from('purchase_orders')
+        .delete()
+        .eq('master_insumo_id', id);
+        
+      if (poError) console.log("Aviso ao limpar pedidos de compra:", poError.message);
+
+      // 4. Finalmente, excluir do Catálogo Mestre
       const { error } = await supabase
         .from('master_insumos')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
+      
       onRefresh();
-    } catch (error) {
+      alert("Insumo removido do catálogo e estoque limpo com sucesso.");
+    } catch (error: any) {
       console.error("Erro ao excluir:", error);
-      alert("Erro ao excluir insumo.");
+      alert("Erro ao excluir insumo: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -204,7 +249,7 @@ const InsumoMaster: React.FC<InsumoMasterProps> = ({ insumos, onRefresh }) => {
                   <button onClick={() => handleOpenModal(item)} className="p-2.5 text-slate-300 hover:text-emerald-500 transition-colors bg-slate-50 rounded-xl hover:bg-emerald-50">
                     <Edit2 size={16} />
                   </button>
-                  <button onClick={() => handleDelete(item.id)} className="p-2.5 text-slate-300 hover:text-red-500 transition-colors bg-slate-50 rounded-xl hover:bg-red-50">
+                  <button onClick={() => handleDelete(item.id)} className="p-2.5 text-slate-300 hover:text-red-500 transition-colors bg-slate-50 rounded-xl hover:bg-red-50" title="Excluir do Catálogo e Estoque">
                     <Trash2 size={16} />
                   </button>
                 </div>
