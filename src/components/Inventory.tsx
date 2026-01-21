@@ -5,7 +5,7 @@ import {
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
   User, ClipboardList, MinusCircle,
-  ShieldCheck, AlertTriangle
+  ShieldCheck, AlertTriangle, Trash2, Lock
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -23,13 +23,15 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
-  const [activeActionModal, setActiveActionModal] = useState<'ENTRADA_MANUAL' | 'BAIXA_MANUAL' | 'TRANSFERIR' | 'HISTORICO' | null>(null);
+  const [activeActionModal, setActiveActionModal] = useState<'ENTRADA_MANUAL' | 'BAIXA_MANUAL' | 'TRANSFERIR' | 'HISTORICO' | 'ZERAR_ESTOQUE' | null>(null);
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<Insumo | null>(null);
 
   const [formQty, setFormQty] = useState('');
   const [selectedMasterId, setSelectedMasterId] = useState(''); 
   const [formReason, setFormReason] = useState('');
   const [formDestFarmId, setFormDestFarmId] = useState('');
+  const [resetPassword, setResetPassword] = useState(''); // Senha para zerar estoque
+  
   const [loading, setLoading] = useState(false);
   const [fixingReserves, setFixingReserves] = useState(false);
 
@@ -47,6 +49,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setSelectedMasterId('');
     setFormReason('');
     setFormDestFarmId('');
+    setResetPassword('');
     setSelectedItemForHistory(null);
   };
 
@@ -69,6 +72,69 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       alert("Erro ao corrigir reservas.");
     } finally {
       setFixingReserves(false);
+    }
+  };
+
+  const handleResetStockSubmit = async () => {
+    if (!resetPassword) {
+      alert("Por favor, digite sua senha para confirmar.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Verificar Autenticação (Re-login para validar senha)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) throw new Error("Usuário não identificado.");
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: resetPassword
+      });
+
+      if (authError) {
+        alert("Senha incorreta. Operação cancelada.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Buscar itens com saldo para gerar log
+      const { data: itemsWithStock } = await supabase
+        .from('inventory')
+        .select('id, physical_stock')
+        .gt('physical_stock', 0);
+
+      // 3. Atualizar Estoque para 0
+      const { error: updateError } = await supabase
+        .from('inventory')
+        .update({ physical_stock: 0 })
+        .gt('physical_stock', 0);
+
+      if (updateError) throw updateError;
+
+      // 4. Gerar Logs de Histórico
+      if (itemsWithStock && itemsWithStock.length > 0) {
+        const logs = itemsWithStock.map(item => ({
+          inventory_id: item.id,
+          type: 'SAIDA',
+          description: 'RESET TOTAL DE ESTOQUE (Zeramento)',
+          quantity: -Number(item.physical_stock),
+          user_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Admin',
+          user_id: user.id
+        }));
+
+        await supabase.from('stock_history').insert(logs);
+      }
+
+      alert("Estoque zerado com sucesso!");
+      onRefresh();
+      closeActionModal();
+
+    } catch (error: any) {
+      console.error("Erro ao zerar:", error);
+      alert("Erro ao zerar estoque: " + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -264,6 +330,13 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             <ShieldCheck size={18} />
             {fixingReserves ? 'CORRIGINDO...' : 'RECALCULAR RESERVAS'}
           </button>
+          <button 
+            onClick={() => setActiveActionModal('ZERAR_ESTOQUE')}
+            className="px-6 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all"
+            title="Apagar todo o estoque físico"
+          >
+            <Trash2 size={18} /> ZERAR
+          </button>
         </div>
 
         <div className="space-y-2">
@@ -443,157 +516,189 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         </div>
       )}
 
-      {/* Manual Action Modal (Entrada/Baixa/Transferencia) */}
-      {(activeActionModal === 'ENTRADA_MANUAL' || activeActionModal === 'BAIXA_MANUAL' || activeActionModal === 'TRANSFERIR') && (
+      {/* Manual Action Modal (Entrada/Baixa/Transferencia/Zerar) */}
+      {activeActionModal && activeActionModal !== 'HISTORICO' && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white border border-slate-200 rounded-[3rem] w-full max-w-xl shadow-2xl overflow-hidden flex flex-col p-10 space-y-8 animate-in zoom-in-95">
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
                   {activeActionModal === 'ENTRADA_MANUAL' ? 'Entrada Manual' : 
-                   activeActionModal === 'BAIXA_MANUAL' ? 'Baixa Manual' : 'Transferência entre Fazendas'}
+                   activeActionModal === 'BAIXA_MANUAL' ? 'Baixa Manual' : 
+                   activeActionModal === 'TRANSFERIR' ? 'Transferência' : 'Zerar Estoque'}
                 </h3>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                  {activeActionModal === 'TRANSFERIR' ? 'Movimentação logística de ativos' : 'Ajuste de inventário operacional'}
+                  {activeActionModal === 'ZERAR_ESTOQUE' ? 'Ação crítica: requer confirmação de senha' : 
+                   activeActionModal === 'TRANSFERIR' ? 'Movimentação logística de ativos' : 'Ajuste de inventário operacional'}
                 </p>
               </div>
               <button onClick={closeActionModal} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
             </div>
             
-            <div className="space-y-6">
-              {activeActionModal === 'ENTRADA_MANUAL' && (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Selecionar do Catálogo</label>
-                    <div className="relative">
-                      <Beaker className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
-                        value={selectedMasterId}
-                        onChange={(e) => setSelectedMasterId(e.target.value)}
-                      >
-                        <option value="">Buscar Insumo Mestre...</option>
-                        {masterInsumos.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                      </select>
-                    </div>
+            {activeActionModal === 'ZERAR_ESTOQUE' ? (
+              <div className="space-y-6">
+                <div className="bg-red-50 border border-red-100 p-6 rounded-2xl text-center space-y-2">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600 mb-2">
+                    <AlertTriangle size={24} />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazenda de Destino</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-blue-500" size={18} />
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 appearance-none uppercase"
-                        value={formDestFarmId}
-                        onChange={(e) => setFormDestFarmId(e.target.value)}
-                      >
-                        <option value="">Selecionar Fazenda...</option>
-                        {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {activeActionModal === 'BAIXA_MANUAL' && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item em Estoque</label>
+                  <h4 className="text-red-800 font-black uppercase text-sm">Atenção Extrema</h4>
+                  <p className="text-red-600 text-xs font-bold leading-relaxed">
+                    Você está prestes a definir a quantidade de <strong>TODOS</strong> os itens do estoque físico como ZERO. Esta ação é irreversível e gerará registros de saída no histórico.
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Senha de Confirmação</label>
                   <div className="relative">
-                    <Package className="absolute left-6 top-1/2 -translate-y-1/2 text-orange-500" size={18} />
-                    <select 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-500 appearance-none uppercase"
-                      value={selectedMasterId}
-                      onChange={(e) => setSelectedMasterId(e.target.value)}
-                    >
-                      <option value="">Selecionar para dar Baixa...</option>
-                      {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} - {i.farm} (Físico: {i.physicalStock} {i.unit})</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {activeActionModal === 'TRANSFERIR' && (
-                <>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item de Origem</label>
-                    <div className="relative">
-                      <ArrowUpRight className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-500" size={18} />
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none uppercase"
-                        value={selectedMasterId}
-                        onChange={(e) => setSelectedMasterId(e.target.value)}
-                      >
-                        <option value="">Selecionar Origem...</option>
-                        {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} ({i.farm}) - Físico: {i.physicalStock} {i.unit}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazenda de Destino</label>
-                    <div className="relative">
-                      <ArrowDownLeft className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
-                        value={formDestFarmId}
-                        onChange={(e) => setFormDestFarmId(e.target.value)}
-                      >
-                        <option value="">Selecionar Destino...</option>
-                        {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Quantidade</label>
-                  <input 
-                    type="number" 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-black text-sm" 
-                    placeholder="0.00"
-                    value={formQty} 
-                    onChange={(e) => setFormQty(e.target.value)} 
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Unidade</label>
-                  <div className="w-full bg-slate-100 border border-slate-200 rounded-2xl px-6 py-4 text-slate-400 font-black uppercase text-sm">
-                    {selectedMasterId 
-                      ? (activeActionModal === 'ENTRADA_MANUAL' 
-                          ? masterInsumos.find(m => m.id === selectedMasterId)?.unit 
-                          : stockProp.find(s => s.id === selectedMasterId)?.unit) 
-                      : '---'}
+                    <Lock className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input 
+                      type="password" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-red-500 placeholder:text-slate-300"
+                      placeholder="DIGITE SUA SENHA ATUAL"
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="space-y-6">
+                {activeActionModal === 'ENTRADA_MANUAL' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Selecionar do Catálogo</label>
+                      <div className="relative">
+                        <Beaker className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
+                          value={selectedMasterId}
+                          onChange={(e) => setSelectedMasterId(e.target.value)}
+                        >
+                          <option value="">Buscar Insumo Mestre...</option>
+                          {masterInsumos.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazenda de Destino</label>
+                      <div className="relative">
+                        <MapPin className="absolute left-6 top-1/2 -translate-y-1/2 text-blue-500" size={18} />
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 appearance-none uppercase"
+                          value={formDestFarmId}
+                          onChange={(e) => setFormDestFarmId(e.target.value)}
+                        >
+                          <option value="">Selecionar Fazenda...</option>
+                          {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              {(activeActionModal !== 'TRANSFERIR') && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Justificativa / Motivo</label>
-                  <textarea 
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-xs h-24 resize-none" 
-                    placeholder="EX: CORREÇÃO DE INVENTÁRIO, PERDA OPERACIONAL, BRINDE, ETC..."
-                    value={formReason}
-                    onChange={(e) => setFormReason(e.target.value)}
-                  />
+                {activeActionModal === 'BAIXA_MANUAL' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item em Estoque</label>
+                    <div className="relative">
+                      <Package className="absolute left-6 top-1/2 -translate-y-1/2 text-orange-500" size={18} />
+                      <select 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-500 appearance-none uppercase"
+                        value={selectedMasterId}
+                        onChange={(e) => setSelectedMasterId(e.target.value)}
+                      >
+                        <option value="">Selecionar para dar Baixa...</option>
+                        {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} - {i.farm} (Físico: {i.physicalStock} {i.unit})</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {activeActionModal === 'TRANSFERIR' && (
+                  <>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item de Origem</label>
+                      <div className="relative">
+                        <ArrowUpRight className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-500" size={18} />
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none uppercase"
+                          value={selectedMasterId}
+                          onChange={(e) => setSelectedMasterId(e.target.value)}
+                        >
+                          <option value="">Selecionar Origem...</option>
+                          {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} ({i.farm}) - Físico: {i.physicalStock} {i.unit}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazenda de Destino</label>
+                      <div className="relative">
+                        <ArrowDownLeft className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
+                          value={formDestFarmId}
+                          onChange={(e) => setFormDestFarmId(e.target.value)}
+                        >
+                          <option value="">Selecionar Destino...</option>
+                          {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Quantidade</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-black text-sm" 
+                      placeholder="0.00"
+                      value={formQty} 
+                      onChange={(e) => setFormQty(e.target.value)} 
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Unidade</label>
+                    <div className="w-full bg-slate-100 border border-slate-200 rounded-2xl px-6 py-4 text-slate-400 font-black uppercase text-sm">
+                      {selectedMasterId 
+                        ? (activeActionModal === 'ENTRADA_MANUAL' 
+                            ? masterInsumos.find(m => m.id === selectedMasterId)?.unit 
+                            : stockProp.find(s => s.id === selectedMasterId)?.unit) 
+                        : '---'}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {(activeActionModal !== 'TRANSFERIR') && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Justificativa / Motivo</label>
+                    <textarea 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-xs h-24 resize-none" 
+                      placeholder="EX: CORREÇÃO DE INVENTÁRIO, PERDA OPERACIONAL, BRINDE, ETC..."
+                      value={formReason}
+                      onChange={(e) => setFormReason(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-4 pt-4 border-t border-slate-100">
               <button onClick={closeActionModal} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors" disabled={loading}>Cancelar</button>
               <button 
-                onClick={handleActionSubmit} 
+                onClick={activeActionModal === 'ZERAR_ESTOQUE' ? handleResetStockSubmit : handleActionSubmit} 
                 className={`flex-1 ${
                   activeActionModal === 'ENTRADA_MANUAL' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 
+                  activeActionModal === 'ZERAR_ESTOQUE' ? 'bg-red-600 hover:bg-red-500 shadow-red-500/20' :
                   activeActionModal === 'BAIXA_MANUAL' ? 'bg-[#f26522] hover:bg-orange-600 shadow-orange-500/20' : 
                   'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
                 } text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50`}
                 disabled={loading}
               >
                 {activeActionModal === 'ENTRADA_MANUAL' ? <ArrowDownCircle size={18} /> : 
+                 activeActionModal === 'ZERAR_ESTOQUE' ? <Trash2 size={18} /> :
                  activeActionModal === 'BAIXA_MANUAL' ? <MinusCircle size={18} /> : <ArrowLeftRight size={18} />}
-                {loading ? 'SALVANDO...' : 'CONFIRMAR OPERAÇÃO'}
+                {loading ? 'PROCESSANDO...' : (activeActionModal === 'ZERAR_ESTOQUE' ? 'CONFIRMAR ZERAMENTO' : 'CONFIRMAR OPERAÇÃO')}
               </button>
             </div>
           </div>
