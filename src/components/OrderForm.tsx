@@ -77,8 +77,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
   );
 
   // ... (Efeitos e Lógica de Cálculo mantidos idênticos)
-  // (Para economizar espaço na resposta, vou focar apenas nas mudanças de layout do JSX)
-  // ... Copiando lógica de states e memos ...
   
   useEffect(() => {
     if (initialData && Object.keys(fieldPartialAreas).length === 0) {
@@ -534,6 +532,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 <select name="variety" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50" value={formData.variety} onChange={handleInputChange} disabled={!formData.culture}>
                   <option value="">SELECIONE...</option>
                   {availableVarieties.map(c => <option key={c.id} value={c.variety}>{c.variety}</option>)}
+                </select>
+             </div>
+          </div>
+
+          {/* Máquina e Operador */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Máquina / Equipamento</label>
+                <select name="machineId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.machineId} onChange={handleInputChange}>
+                  <option value="">SELECIONE...</option>
+                  {machines.map(m => <option key={m.id} value={m.id}>{m.name} ({m.tankCapacity}L)</option>)}
+                </select>
+             </div>
+             <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Operador Responsável</label>
+                <select name="operatorId" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.operatorId} onChange={handleInputChange}>
+                  <option value="">SELECIONE...</option>
+                  {operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
              </div>
           </div>
