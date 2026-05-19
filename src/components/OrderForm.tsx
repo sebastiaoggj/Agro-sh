@@ -12,7 +12,6 @@ import OSPrintLayout from './OSPrintLayout';
 
 const MACHINE_TYPES = ['Pulverizador Terrestre', 'Avião Agrícola', 'Drone de Pulverização', 'Semeadora', 'Distribuidor de Sólidos'];
 
-// ... (Interfaces e Types mantidos)
 interface OrderFormProps {
   initialData?: ServiceOrder | null;
   existingOrders?: ServiceOrder[];
@@ -76,8 +75,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     }) || []
   );
 
-  // ... (Efeitos e Lógica de Cálculo mantidos idênticos)
-  
   useEffect(() => {
     if (initialData && Object.keys(fieldPartialAreas).length === 0) {
       const initialMap: Record<string, number> = {};
@@ -216,19 +213,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
     return missingItems;
   };
 
-  const isItemMissing = (item: ExtendedOSItem) => {
-    if (!item.insumoId) return false;
-    const stockItem = insumos.find(i => i.id === item.insumoId);
-    if (!stockItem) return false;
-    let currentOrderUsage = 0;
-    if (initialData && initialData.status === OrderStatus.EMITTED) {
-        const initialItem = initialData.items.find(i => i.insumoId === item.insumoId);
-        if (initialItem) currentOrderUsage = initialItem.qtyTotal;
-    }
-    const realAvailable = stockItem.availableQty + currentOrderUsage;
-    return item.qtyTotal > (realAvailable + 0.001);
-  };
-
   const handleNext = () => {
     if (!formData.farmId || formData.fieldIds.length === 0) return alert("Selecione fazenda e talhão.");
     if (!formData.flowRate || formData.flowRate <= 0) return alert("Informe Vazão/Dosagem.");
@@ -291,7 +275,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
       <>
         {savedOrder && <OSPrintLayout order={savedOrder} />}
         <div className="max-w-4xl mx-auto py-12 animate-in zoom-in-95 duration-500 px-4 print:hidden">
-          {/* ... Success View (Mantido igual) ... */}
           <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 md:p-24 text-center shadow-xl space-y-12 relative overflow-hidden">
              <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50" />
             
@@ -330,7 +313,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
   if (step === 'SUMMARY') {
     return (
       <div className="max-w-5xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-right-8 duration-500 px-4">
-        {/* ... Summary View (Mantido, com ajustes de padding) ... */}
         {stockWarning && (
           <div className="bg-amber-50 border border-amber-200 rounded-[2rem] p-6 flex items-start gap-4 shadow-sm animate-in slide-in-from-top-4">
             <div className="p-3 bg-amber-100 rounded-xl text-amber-600">
@@ -387,7 +369,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
               </div>
             </div>
 
-            {/* ... Tabela de produtos simplificada para mobile ... */}
             <div className="space-y-4">
               <h3 className="text-sm font-black uppercase tracking-[0.2em] italic text-emerald-600">Composição da Calda</h3>
               <div className="border border-slate-200 rounded-[2rem] overflow-hidden">
@@ -521,6 +502,17 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Aplicação</label>
+                <input type="date" name="recommendationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.recommendationDate} onChange={handleInputChange} />
+             </div>
+             <div className="space-y-1.5">
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Pulverização (Limite)</label>
+                <input type="date" name="maxApplicationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.maxApplicationDate} onChange={handleInputChange} />
+             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <div className="space-y-1.5">
                 <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Cultura</label>
                 <select name="culture" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.culture} onChange={handleInputChange}>
                   <option value="">SELECIONE...</option>
@@ -633,6 +625,18 @@ const OrderForm: React.FC<OrderFormProps> = ({
               ))}
               {items.length === 0 && <div className="text-center py-8 text-slate-400 text-xs font-black uppercase border-2 border-dashed border-slate-200 rounded-2xl">Nenhum insumo adicionado</div>}
             </div>
+          </div>
+
+          {/* Observações */}
+          <div className="space-y-1.5 pt-4">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Observações / Recomendações</label>
+            <textarea 
+              name="observations"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-xs h-24 resize-none" 
+              placeholder="Digite as observações gerais para a equipe de campo..."
+              value={formData.observations}
+              onChange={handleInputChange}
+            />
           </div>
 
           <div className="flex justify-end gap-4 pt-6 border-t border-slate-100">
