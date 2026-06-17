@@ -590,16 +590,20 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-               <div className="bg-blue-100/50 p-3 rounded-xl border border-blue-200">
-                 <span className="text-[8px] font-black uppercase text-blue-400 tracking-widest">Autonomia</span>
-                 <p className="text-lg font-black text-blue-700">{stats.haPerTank.toFixed(2)} ha</p>
-               </div>
-               <div className="bg-emerald-100/50 p-3 rounded-xl border border-emerald-200">
-                 <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Total</span>
-                 <p className="text-lg font-black text-emerald-700">{stats.totalVolume.toLocaleString('pt-BR')} {labels.unit}</p>
-               </div>
+               {!isPivo && (
+                 <>
+                   <div className="bg-blue-100/50 p-3 rounded-xl border border-blue-200">
+                     <span className="text-[8px] font-black uppercase text-blue-400 tracking-widest">Autonomia</span>
+                     <p className="text-lg font-black text-blue-700">{stats.haPerTank.toFixed(2)} ha</p>
+                   </div>
+                   <div className="bg-emerald-100/50 p-3 rounded-xl border border-emerald-200">
+                     <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Total</span>
+                     <p className="text-lg font-black text-emerald-700">{stats.totalVolume.toLocaleString('pt-BR')} {labels.unit}</p>
+                   </div>
+                 </>
+               )}
                {isPivo ? (
-                  <div className="bg-purple-100/50 p-3 rounded-xl border border-purple-200">
+                  <div className="bg-purple-100/50 p-3 rounded-xl border border-purple-200 sm:col-span-3">
                     <span className="text-[8px] font-black uppercase text-purple-500 tracking-widest">Dose / Minuto</span>
                     <p className="text-lg font-black text-purple-700">{stats.dosePerMin.toFixed(2)} {labels.unit}/min</p>
                   </div>
