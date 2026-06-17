@@ -79,6 +79,8 @@ export interface Machine {
   name: string;
   type: string;
   tankCapacity: number;
+  isPivo?: boolean;
+  turnTime?: number;
 }
 
 export interface OSItem {

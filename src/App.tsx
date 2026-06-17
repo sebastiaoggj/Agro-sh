@@ -172,7 +172,16 @@ const App: React.FC = () => {
       if (fieldsData) setFields(fieldsData.map((f: any) => ({ ...f, farmId: f.farm_id, farmName: f.farm?.name })));
 
       const { data: machinesData } = await supabase.from('machines').select('*');
-      if (machinesData) setMachines(machinesData.map(m => ({ id: m.id, name: m.name, type: 'Pulverizador Terrestre', tankCapacity: m.capacity })));
+      if (machinesData) {
+        setMachines(machinesData.map(m => ({ 
+          id: m.id, 
+          name: m.name, 
+          type: 'Pulverizador Terrestre', 
+          tankCapacity: m.capacity,
+          isPivo: m.is_pivo,
+          turnTime: m.turn_time
+        })));
+      }
 
       const { data: opData } = await supabase.from('operators').select('*');
       if (opData) setOperators(opData.map(o => ({ id: o.id, name: o.name })));

@@ -5,7 +5,7 @@ import {
   Settings, ChevronDown, Minus, AlertCircle, ChevronLeft, CheckCircle2,
   Printer, Share2, FileText, LayoutDashboard, Sparkles, Check, 
   Search as SearchIcon, Loader2, FlaskConical, AlertTriangle,
-  PackageX, Sprout, Layers, PencilRuler
+  PackageX, Sprout, Layers, PencilRuler, RefreshCw
 } from 'lucide-react';
 import { OSItem, Field, Machine, Insumo, OrderStatus, ServiceOrder, OperationType } from '../types';
 import OSPrintLayout from './OSPrintLayout';
@@ -65,7 +65,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
     status: initialData?.status || OrderStatus.EMITTED,
     applicationType: initialData?.applicationType || 'HERBICIDA',
     mandatoryPhrase: initialData?.mandatoryPhrase || 'É obrigatório o uso de EPI\'S.',
-    observations: initialData?.observations || ''
+    observations: initialData?.observations || '',
+    turnTime: 0, // Novo campo para pivô
   });
 
   const [items, setItems] = useState<ExtendedOSItem[]>(
@@ -112,6 +113,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const selectedFields = useMemo(() => fields.filter(f => formData.fieldIds.includes(f.id)), [formData.fieldIds, fields]);
   const selectedMachine = useMemo(() => machines.find(m => m.id === formData.machineId), [formData.machineId, machines]);
   const selectedOperator = useMemo(() => operators.find(o => o.id === formData.operatorId), [formData.operatorId, operators]);
+  const isPivo = selectedMachine?.isPivo;
 
   const stats = useMemo(() => {
     const area = formData.fieldIds.reduce((sum, id) => sum + (fieldPartialAreas[id] || 0), 0);
@@ -124,12 +126,17 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const hasPartialTank = numberOfTanksExact > numberOfTanksFull;
     const totalRefills = Math.ceil(numberOfTanksExact);
     const partialTankVolume = hasPartialTank ? totalVolume - (numberOfTanksFull * tankCap) : 0;
-    return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume, totalRefills };
-  }, [formData.fieldIds, fieldPartialAreas, formData.flowRate, formData.tankCapacity]);
+    const dosePerMin = (formData.turnTime || 1) > 0 ? tankCap / (formData.turnTime || 1) : 0;
+    return { area, totalVolume, haPerTank, numberOfTanksFull, hasPartialTank, partialTankVolume, totalRefills, dosePerMin };
+  }, [formData.fieldIds, fieldPartialAreas, formData.flowRate, formData.tankCapacity, formData.turnTime]);
 
   useEffect(() => {
     if (selectedMachine && !initialData) {
-      setFormData(prev => ({ ...prev, tankCapacity: selectedMachine.tankCapacity }));
+      setFormData(prev => ({ 
+        ...prev, 
+        tankCapacity: selectedMachine.tankCapacity,
+        turnTime: selectedMachine.turnTime || 0
+      }));
     }
   }, [formData.machineId, initialData, selectedMachine]);
 
@@ -215,7 +222,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   const handleNext = () => {
     if (!formData.farmId || formData.fieldIds.length === 0) return alert("Selecione fazenda e talhão.");
-    if (!formData.flowRate || formData.flowRate <= 0) return alert("Informe Vazão/Dosagem.");
+    if (!isPivo && (!formData.flowRate || formData.flowRate <= 0)) return alert("Informe Vazão/Dosagem.");
     if (stats.area <= 0) return alert("Área total deve ser maior que zero.");
     const missing = checkStockAvailability();
     if (missing.length > 0) setStockWarning(`Estoque insuficiente.`);
@@ -549,27 +556,37 @@ const OrderForm: React.FC<OrderFormProps> = ({
           {/* Configuração Técnica */}
           <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
             <h3 className="text-xs font-black uppercase tracking-widest text-blue-600 border-b border-slate-200 pb-2">{labels.techTitle}</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className={`grid grid-cols-2 md:grid-cols-3 ${isPivo ? 'lg:grid-cols-2' : 'lg:grid-cols-5'} gap-4`}>
                <div className="space-y-1">
                  <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.capacity}</label>
                  <input type="number" name="tankCapacity" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.tankCapacity || ''} onChange={handleInputChange} />
                </div>
-               <div className="space-y-1">
-                 <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.flow}</label>
-                 <input type="number" name="flowRate" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.flowRate || ''} onChange={handleInputChange} />
-               </div>
-               <div className="space-y-1">
-                 <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.nozzle}</label>
-                 <input type="text" name="nozzle" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Config" value={formData.nozzle} onChange={handleInputChange} />
-               </div>
-               <div className="space-y-1">
-                 <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.pressure}</label>
-                 <input type="text" name="pressure" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Config" value={formData.pressure} onChange={handleInputChange} />
-               </div>
-               <div className="space-y-1">
-                 <label className="text-[9px] font-bold text-slate-400 uppercase">Velocidade</label>
-                 <input type="text" name="speed" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Km/h" value={formData.speed} onChange={handleInputChange} />
-               </div>
+               
+               {isPivo ? (
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Tempo de Giro (min)</label>
+                  <input type="number" name="turnTime" className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.turnTime || ''} readOnly />
+                </div>
+               ) : (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.flow}</label>
+                    <input type="number" name="flowRate" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" value={formData.flowRate || ''} onChange={handleInputChange} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.nozzle}</label>
+                    <input type="text" name="nozzle" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Config" value={formData.nozzle} onChange={handleInputChange} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">{labels.pressure}</label>
+                    <input type="text" name="pressure" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Config" value={formData.pressure} onChange={handleInputChange} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-slate-400 uppercase">Velocidade</label>
+                    <input type="text" name="speed" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black outline-none focus:ring-2 focus:ring-blue-500" placeholder="Km/h" value={formData.speed} onChange={handleInputChange} />
+                  </div>
+                </>
+               )}
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
@@ -581,10 +598,17 @@ const OrderForm: React.FC<OrderFormProps> = ({
                  <span className="text-[8px] font-black uppercase text-emerald-500 tracking-widest">Total</span>
                  <p className="text-lg font-black text-emerald-700">{stats.totalVolume.toLocaleString('pt-BR')} {labels.unit}</p>
                </div>
-               <div className="bg-orange-100/50 p-3 rounded-xl border border-orange-200">
-                 <span className="text-[8px] font-black uppercase text-orange-500 tracking-widest">Cargas</span>
-                 <p className="text-lg font-black text-orange-700">{stats.totalRefills}</p>
-               </div>
+               {isPivo ? (
+                  <div className="bg-purple-100/50 p-3 rounded-xl border border-purple-200">
+                    <span className="text-[8px] font-black uppercase text-purple-500 tracking-widest">Dose / Minuto</span>
+                    <p className="text-lg font-black text-purple-700">{stats.dosePerMin.toFixed(2)} {labels.unit}/min</p>
+                  </div>
+               ) : (
+                  <div className="bg-orange-100/50 p-3 rounded-xl border border-orange-200">
+                    <span className="text-[8px] font-black uppercase text-orange-500 tracking-widest">Cargas</span>
+                    <p className="text-lg font-black text-orange-700">{stats.totalRefills}</p>
+                  </div>
+               )}
             </div>
           </div>
 
