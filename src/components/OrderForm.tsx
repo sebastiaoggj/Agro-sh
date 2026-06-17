@@ -502,11 +502,11 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              <div className="space-y-1.5">
-                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Aplicação</label>
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Emissão</label>
                 <input type="date" name="recommendationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.recommendationDate} onChange={handleInputChange} />
              </div>
              <div className="space-y-1.5">
-                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Pulverização (Limite)</label>
+                <label className="text-[9px] font-black uppercase text-slate-400 tracking-widest ml-1">Data de Aplicação</label>
                 <input type="date" name="maxApplicationDate" className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={formData.maxApplicationDate} onChange={handleInputChange} />
              </div>
           </div>
