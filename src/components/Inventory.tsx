@@ -177,10 +177,18 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             return;
         }
 
+        // LÓGICA CORRIGIDA para atualizar preço base
         const masterInsumo = masterInsumos.find(mi => mi.id === selectedMasterId);
-        if (masterInsumo && masterInsumo.price !== unitPrice) {
-            if (confirm(`O preço base deste insumo é R$ ${masterInsumo.price?.toFixed(2)}, mas o valor informado é R$ ${unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`)) {
-                await supabase.from('master_insumos').update({ price: unitPrice }).eq('id', selectedMasterId);
+        if (masterInsumo) {
+            const basePrice = masterInsumo.price;
+            if (basePrice === null || typeof basePrice === 'undefined' || Math.abs(basePrice - unitPrice) > 0.01) {
+                const message = (basePrice === null || typeof basePrice === 'undefined')
+                    ? `Este insumo não possui um preço base. Deseja definir R$ ${unitPrice.toFixed(2)} como o novo preço base?`
+                    : `O preço base deste insumo é R$ ${basePrice.toFixed(2)}, mas o valor informado é R$ ${unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`;
+
+                if (confirm(message)) {
+                    await supabase.from('master_insumos').update({ price: unitPrice }).eq('id', selectedMasterId);
+                }
             }
         }
 

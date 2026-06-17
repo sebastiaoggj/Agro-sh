@@ -563,11 +563,22 @@ const App: React.FC = () => {
             if (insertError) throw insertError;
           }
 
-          // Atualizar o preço base, se necessário
+          // Atualizar o preço base, se necessário (LÓGICA CORRIGIDA)
           const masterInsumo = masterInsumos.find(mi => mi.id === po.master_insumo_id);
-          if (masterInsumo && masterInsumo.price !== extraData.unitPrice) {
-            if (confirm(`O preço base deste insumo é R$ ${masterInsumo.price?.toFixed(2)}, mas o valor da NF é R$ ${extraData.unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`)) {
-              await supabase.from('master_insumos').update({ price: extraData.unitPrice }).eq('id', po.master_insumo_id);
+          if (masterInsumo) {
+            const basePrice = masterInsumo.price; // Can be number, null, or undefined
+            const newPrice = extraData.unitPrice;
+
+            // Compare prices ensuring they are treated as numbers.
+            // The condition triggers if basePrice is not set, or if it's different from the new price.
+            if (basePrice === null || typeof basePrice === 'undefined' || Math.abs(basePrice - newPrice) > 0.01) {
+                const message = (basePrice === null || typeof basePrice === 'undefined')
+                    ? `Este insumo não possui um preço base. Deseja definir R$ ${newPrice.toFixed(2)} como o novo preço base?`
+                    : `O preço base deste insumo é R$ ${basePrice.toFixed(2)}, mas o valor da NF é R$ ${newPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`;
+                
+                if (confirm(message)) {
+                    await supabase.from('master_insumos').update({ price: newPrice }).eq('id', po.master_insumo_id);
+                }
             }
           }
        }
