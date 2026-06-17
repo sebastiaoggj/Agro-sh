@@ -545,7 +545,8 @@ const App: React.FC = () => {
           }
        }
 
-       const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
+       const { unitPrice, ...poUpdateData } = extraData;
+       const { error } = await supabase.from('purchase_orders').update({ status, ...poUpdateData }).eq('id', id);
        if (error) throw error;
        fetchAllData();
        if (status === PurchaseOrderStatus.RECEIVED) alert("Recebimento confirmado e lote de estoque criado!");
