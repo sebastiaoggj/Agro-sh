@@ -217,12 +217,6 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     return harvest ? harvest.name : 'FORA DE SAFRA';
   };
 
-  // Métricas calculadas com base nos dados FILTRADOS
-  const totalArea = filteredOrders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
-  const totalVolume = filteredOrders.reduce((acc, order) => acc + (order.totalVolume || 0), 0);
-  const completedCount = filteredOrders.filter(o => o.status === OrderStatus.COMPLETED).length;
-  const reworkCount = filteredOrders.filter(o => o.status === OrderStatus.REWORK || o.status === OrderStatus.LATE).length;
-
   const calculateTotalCost = (order: ServiceOrder) => {
     if (!order.items || order.items.length === 0) return 0;
     
@@ -232,6 +226,16 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       return total + (item.qtyTotal * price);
     }, 0);
   };
+
+  const totalCostOfFilteredOrders = useMemo(() => {
+    return filteredOrders.reduce((acc, order) => acc + calculateTotalCost(order), 0);
+  }, [filteredOrders, inventory]);
+
+  // Métricas calculadas com base nos dados FILTRADOS
+  const totalArea = filteredOrders.reduce((acc, order) => acc + (order.totalArea || 0), 0);
+  const totalVolume = filteredOrders.reduce((acc, order) => acc + (order.totalVolume || 0), 0);
+  const completedCount = filteredOrders.filter(o => o.status === OrderStatus.COMPLETED).length;
+  const reworkCount = filteredOrders.filter(o => o.status === OrderStatus.REWORK || o.status === OrderStatus.LATE).length;
 
   const handleExportExcel = () => {
     if (filteredOrders.length === 0) {
@@ -635,6 +639,13 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                EXIBINDO {filteredOrders.length} REGISTROS
              </span>
+             <div className="flex items-center gap-4">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Custo Total (Material)</span>
+                <div className="flex items-center gap-1 text-emerald-600">
+                    <span className="text-lg font-black">R$</span>
+                    <span className="text-2xl font-black tracking-tight whitespace-nowrap">{totalCostOfFilteredOrders.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+             </div>
           </div>
         </div>
       </div>
