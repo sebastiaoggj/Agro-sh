@@ -139,7 +139,7 @@ const FleetManagement: React.FC = () => {
       if (modalType === 'machine') {
         const payload = {
           name: formData.name,
-          capacity: !formData.isPivo ? formData.capacity : null,
+          capacity: formData.capacity,
           farm_ids: formData.farmIds,
           user_id: user.id,
           is_pivo: formData.isPivo,
@@ -475,7 +475,7 @@ const FleetManagement: React.FC = () => {
                 <p className="text-[9px] text-slate-500 italic mt-1 font-medium">Se nenhuma fazenda for selecionada, estará disponível para todas.</p>
               </div>
 
-              {modalType === 'machine' && !formData.isPivo && (
+              {modalType === 'machine' && (
                 <div className="space-y-1.5 animate-in fade-in duration-300">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Capacidade do Tanque (L) *</label>
                   <div className="relative">
