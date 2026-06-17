@@ -12,7 +12,7 @@ interface PurchaseOrdersProps {
   farms: { id: string, name: string }[]; // Agora recebemos objetos com ID
   masterInsumos: MasterInsumo[];
   onApprove: (id: string) => void;
-  onReceive: (id: string, supplier: string, nf: string) => void;
+  onReceive: (id: string, supplier: string, nf: string, unitPrice: number) => void;
   onSave: (order: PurchaseOrder) => void;
   onDelete: (id: string) => void;
   onRepeat: (order: PurchaseOrder) => void;
@@ -35,7 +35,8 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
   
   const [receiptData, setReceiptData] = useState({
     supplier: '',
-    invoiceNumber: ''
+    invoiceNumber: '',
+    unitPrice: 0
   });
 
   const [formData, setFormData] = useState<Partial<PurchaseOrder & { unitPrice: number, selectedInsumoId: string, selectedFarmId: string }>>({
@@ -152,20 +153,22 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
 
   const openReceiveModal = (order: PurchaseOrder) => {
     setSelectedOrderToReceive(order);
+    const unitPrice = order.quantity > 0 ? order.totalValue / order.quantity : 0;
     setReceiptData({
       supplier: order.supplier,
-      invoiceNumber: ''
+      invoiceNumber: '',
+      unitPrice: unitPrice
     });
     setIsReceiveModalOpen(true);
   };
 
   const handleConfirmReceive = () => {
-    if (!receiptData.supplier || !receiptData.invoiceNumber) {
-      alert("Por favor, preencha o fornecedor e o número da NF.");
+    if (!receiptData.supplier || !receiptData.invoiceNumber || receiptData.unitPrice <= 0) {
+      alert("Por favor, preencha o fornecedor, o número da NF e um valor unitário válido.");
       return;
     }
     if (selectedOrderToReceive) {
-      onReceive(selectedOrderToReceive.id, receiptData.supplier, receiptData.invoiceNumber);
+      onReceive(selectedOrderToReceive.id, receiptData.supplier, receiptData.invoiceNumber, receiptData.unitPrice);
       setIsReceiveModalOpen(false);
       setSelectedOrderToReceive(null);
     }
@@ -442,6 +445,20 @@ const PurchaseOrders: React.FC<PurchaseOrdersProps> = ({
                     placeholder="EX: 000.123.456"
                     value={receiptData.invoiceNumber}
                     onChange={(e) => setReceiptData({...receiptData, invoiceNumber: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Valor Unitário Real (NF)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input 
+                    type="number" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" 
+                    placeholder="0.00"
+                    value={receiptData.unitPrice}
+                    onChange={(e) => setReceiptData({...receiptData, unitPrice: Number(e.target.value)})}
                   />
                 </div>
               </div>

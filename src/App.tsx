@@ -525,43 +525,30 @@ const App: React.FC = () => {
           if (poError || !po) throw new Error("Pedido não encontrado");
           if (po.status === PurchaseOrderStatus.RECEIVED) { alert("Este pedido já foi recebido anteriormente."); return; }
 
-          const { data: existingInv } = await supabase.from('inventory').select('*').eq('master_insumo_id', po.master_insumo_id).eq('farm_id', po.farm_id).single();
-          let inventoryId = existingInv?.id;
-
-          if (existingInv) {
-             await supabase.from('inventory').update({ physical_stock: Number(existingInv.physical_stock) + Number(po.quantity) }).eq('id', existingInv.id);
-          } else {
-             const { data: newInv, error: invError } = await supabase.from('inventory').insert({
-                master_insumo_id: po.master_insumo_id,
-                farm_id: po.farm_id,
-                physical_stock: Number(po.quantity),
-                reserved_qty: 0,
-                min_stock: 0,
-                user_id: session?.user?.id || offlineUserId
-             }).select().single();
-             if (invError) throw invError;
-             inventoryId = newInv.id;
-          }
-
-          await supabase.from('stock_history').insert({
-             inventory_id: inventoryId,
-             type: 'ENTRADA',
-             description: `Recebimento Pedido #${po.order_number} (NF: ${extraData.invoice_number || 'N/A'})`,
-             quantity: Number(po.quantity),
-             user_name: userProfile?.full_name || 'Sistema',
-             user_id: session?.user?.id || offlineUserId
+          // Criar o lote
+          await supabase.from('stock_lots').insert({
+            master_insumo_id: po.master_insumo_id,
+            farm_id: po.farm_id,
+            initial_quantity: po.quantity,
+            remaining_quantity: po.quantity,
+            unit_price: extraData.unitPrice,
+            source_description: `NF ${extraData.invoice_number || 'N/A'}`,
+            purchase_order_id: po.id
           });
 
-          const unitPrice = Number(po.total_value) / Number(po.quantity);
-          if (!isNaN(unitPrice) && unitPrice > 0 && po.master_insumo_id) {
-             await supabase.from('master_insumos').update({ price: unitPrice }).eq('id', po.master_insumo_id);
+          // Atualizar o preço base, se necessário
+          const masterInsumo = masterInsumos.find(mi => mi.id === po.master_insumo_id);
+          if (masterInsumo && masterInsumo.price !== extraData.unitPrice) {
+            if (confirm(`O preço base deste insumo é R$ ${masterInsumo.price?.toFixed(2)}, mas o valor da NF é R$ ${extraData.unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`)) {
+              await supabase.from('master_insumos').update({ price: extraData.unitPrice }).eq('id', po.master_insumo_id);
+            }
           }
        }
 
        const { error } = await supabase.from('purchase_orders').update({ status, ...extraData }).eq('id', id);
        if (error) throw error;
        fetchAllData();
-       if (status === PurchaseOrderStatus.RECEIVED) alert("Recebimento confirmado e estoque atualizado!");
+       if (status === PurchaseOrderStatus.RECEIVED) alert("Recebimento confirmado e lote de estoque criado!");
     } catch(e: any) { alert("Erro ao atualizar: " + e.message); }
   };
 
@@ -637,7 +624,7 @@ const App: React.FC = () => {
             <ContentWrapper><InsumoMaster insumos={masterInsumos} onRefresh={handleRefresh} /></ContentWrapper>
           ) : <div className="flex h-full items-center justify-center text-slate-400 font-bold uppercase">Acesso Negado</div>;
         
-        case 'purchases': return <ContentWrapper><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></ContentWrapper>;
+        case 'purchases': return <ContentWrapper><PurchaseOrders orders={purchaseOrders} farms={farms} masterInsumos={masterInsumos} onApprove={(id) => handleUpdatePOStatus(id, PurchaseOrderStatus.APPROVED)} onReceive={(id, s, n, p) => handleUpdatePOStatus(id, PurchaseOrderStatus.RECEIVED, {supplier: s, invoice_number: n, unitPrice: p})} onSave={handleSavePurchaseOrder} onDelete={handleDeletePO} onRepeat={() => {}} /></ContentWrapper>;
         case 'orders': return <ContentWrapper><OrderForm initialData={editingOrder} existingOrders={orders} onSave={handleSaveServiceOrder} onCancel={() => { setEditingOrder(null); setActiveTab('dashboard'); }} farms={farms} fields={fields} machines={machines} operators={operators} insumos={inventory} crops={crops} /></ContentWrapper>;
         
         case 'fleet': 
