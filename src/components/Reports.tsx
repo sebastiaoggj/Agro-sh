@@ -113,6 +113,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
   const [selectedFarm, setSelectedFarm] = useState<string>('');
   const [selectedField, setSelectedField] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<string>('');
+  const [selectedCulture, setSelectedCulture] = useState<string>('');
   
   // Harvest States
   const [harvests, setHarvests] = useState<Harvest[]>([]);
@@ -150,22 +151,24 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     setTimelineEvents(data || []);
   };
 
-  // ... (Keep existing Filter Logic)
   const filterOptions = useMemo(() => {
     const farms = new Set<string>();
     const fields = new Set<string>();
     const products = new Set<string>();
+    const cultures = new Set<string>();
 
     orders.forEach(order => {
       if (order.farmName) farms.add(order.farmName);
       if (order.fieldNames) order.fieldNames.forEach(f => fields.add(f));
       if (order.items) order.items.forEach(i => products.add(i.productName));
+      if (order.culture) cultures.add(order.culture);
     });
 
     return {
       farms: Array.from(farms).sort(),
       fields: Array.from(fields).sort(),
-      products: Array.from(products).sort()
+      products: Array.from(products).sort(),
+      cultures: Array.from(cultures).sort()
     };
   }, [orders]);
 
@@ -195,10 +198,11 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
       const matchesFarm = selectedFarm ? o.farmName === selectedFarm : true;
       const matchesField = selectedField ? (o.fieldNames && o.fieldNames.includes(selectedField)) : true;
       const matchesProduct = selectedProduct ? (o.items && o.items.some(i => i.productName === selectedProduct)) : true;
+      const matchesCulture = selectedCulture ? o.culture === selectedCulture : true;
 
-      return matchesText && matchesHarvest && matchesFarm && matchesField && matchesProduct;
+      return matchesText && matchesHarvest && matchesFarm && matchesField && matchesProduct && matchesCulture;
     });
-  }, [orders, searchTerm, selectedHarvestId, harvests, selectedFarm, selectedField, selectedProduct]);
+  }, [orders, searchTerm, selectedHarvestId, harvests, selectedFarm, selectedField, selectedProduct, selectedCulture]);
 
   // Identify harvest for a specific order based on date
   const getOrderHarvest = (dateStr?: string) => {
@@ -303,9 +307,10 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
     setSelectedField('');
     setSelectedProduct('');
     setSelectedHarvestId('all');
+    setSelectedCulture('');
   };
 
-  const activeFiltersCount = [selectedFarm, selectedField, selectedProduct, searchTerm].filter(Boolean).length + (selectedHarvestId !== 'all' ? 1 : 0);
+  const activeFiltersCount = [selectedFarm, selectedField, selectedProduct, searchTerm, selectedCulture].filter(Boolean).length + (selectedHarvestId !== 'all' ? 1 : 0);
 
   return (
     <>
@@ -347,7 +352,6 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
         {/* Advanced Filters Panel */}
         {isFiltersOpen && (
           <div className="bg-white border border-slate-200 rounded-[2.5rem] p-8 shadow-lg animate-in slide-in-from-top-4 z-20">
-            {/* ... Existing Filters JSX ... */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3 text-slate-400">
                 <Filter size={20} />
@@ -358,7 +362,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
               </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               {/* Safra */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Período / Safra</label>
@@ -428,6 +432,23 @@ const Reports: React.FC<ReportsProps> = ({ orders, inventory, onEdit, onDelete }
                   >
                     <option value="">TODOS OS PRODUTOS</option>
                     {filterOptions.products.map(prod => <option key={prod} value={prod}>{prod}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
+              </div>
+
+              {/* Cultura */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Cultura</label>
+                <div className="relative group">
+                  <Sprout className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={16} />
+                  <select 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-12 pr-10 py-3.5 text-[10px] font-black text-slate-700 outline-none appearance-none cursor-pointer focus:ring-2 focus:ring-emerald-500 transition-all uppercase tracking-widest"
+                    value={selectedCulture}
+                    onChange={(e) => setSelectedCulture(e.target.value)}
+                  >
+                    <option value="">TODAS AS CULTURAS</option>
+                    {filterOptions.cultures.map(cult => <option key={cult} value={cult}>{cult}</option>)}
                   </select>
                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 </div>
