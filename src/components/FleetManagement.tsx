@@ -13,7 +13,9 @@ import {
   X,
   Save,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  RefreshCw,
+  Check
 } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
 
@@ -23,6 +25,8 @@ interface Machine {
   farmIds: string[]; // IDs das fazendas vinculadas
   farmNames: string[];
   capacity: number;
+  isPivo?: boolean;
+  turnTime?: number;
 }
 
 interface Operator {
@@ -68,7 +72,9 @@ const FleetManagement: React.FC = () => {
           name: m.name,
           capacity: m.capacity,
           farmIds: m.farm_ids || [],
-          farmNames: (m.farm_ids || []).map((fid: string) => farmsData?.find(f => f.id === fid)?.name || 'N/A')
+          farmNames: (m.farm_ids || []).map((fid: string) => farmsData?.find(f => f.id === fid)?.name || 'N/A'),
+          isPivo: m.is_pivo,
+          turnTime: m.turn_time
         }));
         setMachines(formattedMachines);
       }
@@ -111,8 +117,7 @@ const FleetManagement: React.FC = () => {
   const handleOpenModal = (type: 'machine' | 'operator', item: any = null) => {
     setModalType(type);
     setEditingItem(item);
-    // Se for edição, garante que farmIds exista, senão inicia array vazio
-    setFormData(item ? { ...item, farmIds: item.farmIds || [] } : { farmIds: [], name: '', capacity: '' });
+    setFormData(item ? { ...item, farmIds: item.farmIds || [] } : { farmIds: [], name: '', capacity: '', isPivo: false, turnTime: '' });
     setModalOpen(true);
   };
 
@@ -134,9 +139,11 @@ const FleetManagement: React.FC = () => {
       if (modalType === 'machine') {
         const payload = {
           name: formData.name,
-          capacity: formData.capacity,
+          capacity: !formData.isPivo ? formData.capacity : null,
           farm_ids: formData.farmIds,
-          user_id: user.id
+          user_id: user.id,
+          is_pivo: formData.isPivo,
+          turn_time: formData.isPivo ? formData.turnTime : null
         };
 
         if (editingItem) {
@@ -260,7 +267,7 @@ const FleetManagement: React.FC = () => {
               <tr className="bg-slate-50 dark:bg-slate-900/50 text-[10px] uppercase font-black tracking-widest text-slate-400 border-b border-slate-100 dark:border-slate-800">
                 <th className="px-8 py-4">Fazenda(s)</th>
                 <th className="px-8 py-4">Máquina</th>
-                <th className="px-8 py-4">Capacidade (L)</th>
+                <th className="px-8 py-4">Capacidade / Config.</th>
                 <th className="px-8 py-4 text-right">Ações</th>
               </tr>
             </thead>
@@ -283,10 +290,17 @@ const FleetManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-8 py-5">
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                        <Droplets size={16} className="text-blue-500" />
-                        <span className="font-black">{m.capacity} L</span>
-                      </div>
+                      {m.isPivo ? (
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                          <RefreshCw size={16} className="text-purple-500" />
+                          <span className="font-black">{m.turnTime} min/giro</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                          <Droplets size={16} className="text-blue-500" />
+                          <span className="font-black">{m.capacity} L</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="flex justify-end gap-2">
@@ -401,6 +415,15 @@ const FleetManagement: React.FC = () => {
             </div>
             
             <div className="p-8 space-y-6">
+              {modalType === 'machine' && (
+                <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer" onClick={() => setFormData({...formData, isPivo: !formData.isPivo})}>
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${formData.isPivo ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'}`}>
+                    {formData.isPivo && <Check size={16} />}
+                  </div>
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Este equipamento é um Pivô Central?</span>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">
                   Nome {modalType === 'machine' ? 'da Máquina' : 'do Operador'} *
@@ -413,6 +436,24 @@ const FleetManagement: React.FC = () => {
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                 />
               </div>
+
+              {modalType === 'machine' && formData.isPivo && (
+                <div className="space-y-1.5 animate-in fade-in duration-300">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">
+                    Tempo de Giro (min/giro) *
+                  </label>
+                  <div className="relative">
+                    <input 
+                      type="number" 
+                      className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-4 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="Ex: 120"
+                      value={formData.turnTime || ''}
+                      onChange={(e) => setFormData({...formData, turnTime: e.target.value})}
+                    />
+                    <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">min/giro</span>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Fazendas (opcional)</label>
@@ -434,8 +475,8 @@ const FleetManagement: React.FC = () => {
                 <p className="text-[9px] text-slate-500 italic mt-1 font-medium">Se nenhuma fazenda for selecionada, estará disponível para todas.</p>
               </div>
 
-              {modalType === 'machine' && (
-                <div className="space-y-1.5">
+              {modalType === 'machine' && !formData.isPivo && (
+                <div className="space-y-1.5 animate-in fade-in duration-300">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Capacidade do Tanque (L) *</label>
                   <div className="relative">
                     <input 
