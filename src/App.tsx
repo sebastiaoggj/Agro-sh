@@ -519,6 +519,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
+    const userId = session?.user?.id || offlineUserId;
     try {
        if (status === PurchaseOrderStatus.RECEIVED) {
           const { data: po, error: poError } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
@@ -535,6 +536,32 @@ const App: React.FC = () => {
             source_description: `NF ${extraData.invoice_number || 'N/A'}`,
             purchase_order_id: po.id
           });
+
+          // CORREÇÃO: Atualizar o estoque consolidado na tabela 'inventory'
+          const { data: inventoryItem, error: invError } = await supabase
+            .from('inventory')
+            .select('id, physical_stock')
+            .eq('master_insumo_id', po.master_insumo_id)
+            .eq('farm_id', po.farm_id)
+            .single();
+
+          if (invError && invError.code !== 'PGRST116') throw invError;
+
+          if (inventoryItem) {
+            const newStock = Number(inventoryItem.physical_stock) + Number(po.quantity);
+            const { error: updateError } = await supabase.from('inventory').update({ physical_stock: newStock }).eq('id', inventoryItem.id);
+            if (updateError) throw updateError;
+          } else {
+            const { error: insertError } = await supabase.from('inventory').insert({
+              master_insumo_id: po.master_insumo_id,
+              farm_id: po.farm_id,
+              physical_stock: po.quantity,
+              user_id: userId,
+              reserved_qty: 0,
+              min_stock: 0
+            });
+            if (insertError) throw insertError;
+          }
 
           // Atualizar o preço base, se necessário
           const masterInsumo = masterInsumos.find(mi => mi.id === po.master_insumo_id);

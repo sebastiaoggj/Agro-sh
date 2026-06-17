@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Package, Search, History, X,
   ArrowDownCircle, ArrowLeftRight, MapPin, 
@@ -30,10 +30,22 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const [selectedMasterId, setSelectedMasterId] = useState(''); 
   const [formReason, setFormReason] = useState('');
   const [formDestFarmId, setFormDestFarmId] = useState('');
+  const [formUnitPrice, setFormUnitPrice] = useState('');
   const [resetPassword, setResetPassword] = useState(''); // Senha para zerar estoque
   
   const [loading, setLoading] = useState(false);
   const [fixingReserves, setFixingReserves] = useState(false);
+
+  useEffect(() => {
+    if (activeActionModal === 'ENTRADA_MANUAL' && selectedMasterId) {
+        const insumo = masterInsumos.find(i => i.id === selectedMasterId);
+        if (insumo && insumo.price) {
+            setFormUnitPrice(insumo.price.toString());
+        } else {
+            setFormUnitPrice('0');
+        }
+    }
+  }, [selectedMasterId, activeActionModal, masterInsumos]);
 
   const filteredItems = useMemo(() => {
     return stockProp.filter(item => {
@@ -49,6 +61,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setSelectedMasterId('');
     setFormReason('');
     setFormDestFarmId('');
+    setFormUnitPrice('');
     setResetPassword('');
     setSelectedItemForHistory(null);
   };
@@ -156,6 +169,20 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           setLoading(false);
           return;
         }
+        
+        const unitPrice = Number(formUnitPrice) || 0;
+        if (unitPrice < 0) {
+            alert("O preço unitário não pode ser negativo.");
+            setLoading(false);
+            return;
+        }
+
+        const masterInsumo = masterInsumos.find(mi => mi.id === selectedMasterId);
+        if (masterInsumo && masterInsumo.price !== unitPrice) {
+            if (confirm(`O preço base deste insumo é R$ ${masterInsumo.price?.toFixed(2)}, mas o valor informado é R$ ${unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`)) {
+                await supabase.from('master_insumos').update({ price: unitPrice }).eq('id', selectedMasterId);
+            }
+        }
 
         const { data: existingItem } = await supabase
           .from('inventory')
@@ -183,6 +210,15 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           if (error) throw error;
           inventoryId = newItem.id;
         }
+
+        await supabase.from('stock_lots').insert({
+            master_insumo_id: selectedMasterId,
+            farm_id: formDestFarmId,
+            initial_quantity: qty,
+            remaining_quantity: qty,
+            unit_price: unitPrice,
+            source_description: `Entrada Manual: ${formReason || 'Ajuste de inventário'}`
+        });
 
         await supabase.from('stock_history').insert({
           inventory_id: inventoryId,
@@ -592,6 +628,16 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                           {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                         </select>
                       </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Valor Unitário (R$)</label>
+                      <input 
+                          type="number" 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 font-black text-sm" 
+                          placeholder="0.00"
+                          value={formUnitPrice} 
+                          onChange={(e) => setFormUnitPrice(e.target.value)} 
+                      />
                     </div>
                   </>
                 )}
