@@ -58,6 +58,18 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     });
   }, [stockProp, searchProduct, farmFilter]);
 
+  const calculateTotalValue = (item: Insumo) => {
+    if (!item.farmId || !item.masterId) return 0;
+    
+    const relevantLots = stockLots.filter(
+      lot => lot.master_insumo_id === item.masterId && lot.farm_id === item.farmId
+    );
+    
+    return relevantLots.reduce((total, lot) => {
+      return total + (Number(lot.remaining_quantity) * Number(lot.unit_price));
+    }, 0);
+  };
+
   const closeActionModal = () => {
     setActiveActionModal(null);
     setFormQty('');
@@ -464,7 +476,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             <tbody className="divide-y divide-slate-50">
               {filteredItems.map((item) => {
                 const available = Math.max(0, item.physicalStock - item.reservedQty);
-                const totalValue = item.totalValue || 0;
+                const totalValue = calculateTotalValue(item);
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">

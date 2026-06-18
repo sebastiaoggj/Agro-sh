@@ -187,24 +187,23 @@ const App: React.FC = () => {
       const { data: opData } = await supabase.from('operators').select('*');
       if (opData) setOperators(opData.map(o => ({ id: o.id, name: o.name })));
 
-      const { data: invData } = await supabase.from('inventory_with_value').select('*');
+      const { data: invData } = await supabase.from('inventory').select(`*, master_insumo:master_insumos(name, active_ingredient, unit, category, price), farm:farms(name)`);
       if (invData) {
         setInventory(invData.map((item: any) => ({
           id: item.id,
           masterId: item.master_insumo_id,
-          name: item.master_insumo_name || 'Item Removido',
-          activeIngredient: item.active_ingredient || '-',
-          unit: item.unit || 'UN',
-          category: item.category || 'OUTROS',
-          price: item.master_price || 0,
-          farm: item.farm_name || 'Desconhecida',
+          name: item.master_insumo?.name || 'Item Removido',
+          activeIngredient: item.master_insumo?.active_ingredient || '-',
+          unit: item.master_insumo?.unit || 'UN',
+          category: item.master_insumo?.category || 'OUTROS',
+          price: item.master_insumo?.price || 0,
+          farm: item.farm?.name || 'Desconhecida',
           farmId: item.farm_id,
           physicalStock: Number(item.physical_stock),
           reservedQty: Number(item.reserved_qty),
           availableQty: Number(item.physical_stock) - Number(item.reserved_qty),
           stock: Number(item.physical_stock),
-          minStock: Number(item.min_stock),
-          totalValue: Number(item.total_value)
+          minStock: Number(item.min_stock)
         })));
       }
 
