@@ -15,11 +15,12 @@ interface InventoryProps {
   masterInsumos: MasterInsumo[];
   farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
+  stockLots: any[];
   onRefresh: () => void;
   onStockChange?: () => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh, onStockChange }) => {
+const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, stockLots, onRefresh, onStockChange }) => {
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
@@ -54,6 +55,19 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       return matchesProduct && matchesFarm;
     });
   }, [stockProp, searchProduct, farmFilter]);
+
+  const calculateTotalValue = (item: Insumo) => {
+    const farm = farms.find(f => f.name === item.farm);
+    if (!farm || !item.masterId) return 0;
+    
+    const relevantLots = stockLots.filter(
+      lot => lot.master_insumo_id === item.masterId && lot.farm_id === farm.id
+    );
+    
+    return relevantLots.reduce((total, lot) => {
+      return total + (Number(lot.remaining_quantity) * Number(lot.unit_price));
+    }, 0);
+  };
 
   const closeActionModal = () => {
     setActiveActionModal(null);
@@ -177,7 +191,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             return;
         }
 
-        // LÓGICA CORRIGIDA para atualizar preço base
         const masterInsumo = masterInsumos.find(mi => mi.id === selectedMasterId);
         if (masterInsumo) {
             const basePrice = masterInsumo.price;
@@ -245,11 +258,26 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
+        const farm = farms.find(f => f.name === targetItem.farm);
+        if (!farm) {
+          alert("Fazenda do item não encontrada.");
+          setLoading(false);
+          return;
+        }
+
         if (qty > targetItem.physicalStock) {
           alert("Quantidade superior ao estoque físico.");
           setLoading(false);
           return;
         }
+
+        const { error: consumeError } = await supabase.rpc('manual_stock_consumption', {
+            p_master_insumo_id: targetItem.masterId,
+            p_farm_id: farm.id,
+            p_quantity_to_consume: qty
+        });
+
+        if (consumeError) throw consumeError;
 
         await supabase.from('inventory').update({
           physical_stock: Math.max(0, targetItem.physicalStock - qty)
@@ -434,6 +462,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                 <th className="px-10 py-8 text-center uppercase">Estoque Físico</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Reservados</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Qtd. Disponível</th>
+                <th className="px-10 py-8 text-center uppercase">Valor Total (R$)</th>
                 <th className="px-10 py-8 uppercase tracking-widest">Fazenda</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Unidade</th>
                 <th className="px-10 py-8 uppercase tracking-widest">Classe</th>
@@ -442,8 +471,8 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredItems.map((item) => {
-                // Cálculo de visualização (Clamp at 0)
                 const available = Math.max(0, item.physicalStock - item.reservedQty);
+                const totalValue = calculateTotalValue(item);
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
@@ -465,6 +494,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                     <td className="px-10 py-8 text-center">
                       <span className="text-emerald-600 font-black text-lg">
                         {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </td>
+                    <td className="px-10 py-8 text-center">
+                      <span className="text-slate-700 font-black text-base">
+                        R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
                     <td className="px-10 py-8">
@@ -489,7 +523,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
               })}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-10 py-20 text-center">
+                  <td colSpan={10} className="px-10 py-20 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-20">
                       <Package size={56} className="text-slate-400" />
                       <p className="text-[10px] font-black uppercase tracking-[0.4em]">Nenhum item em estoque</p>
