@@ -63,6 +63,7 @@ export interface Insumo extends MasterInsumo {
   minStock: number;
   // Campos auxiliares para vincular corretamente
   masterId?: string;
+  totalValue?: number;
 }
 
 export interface StockHistoryEntry {
