@@ -111,33 +111,10 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         return;
       }
 
-      // 2. Buscar itens com saldo para gerar log
-      const { data: itemsWithStock } = await supabase
-        .from('inventory')
-        .select('id, physical_stock')
-        .gt('physical_stock', 0);
+      // 2. Chamar a função RPC para zerar o estoque de forma segura
+      const { error: rpcError } = await supabase.rpc('reset_all_stock');
 
-      // 3. Atualizar Estoque para 0
-      const { error: updateError } = await supabase
-        .from('inventory')
-        .update({ physical_stock: 0 })
-        .gt('physical_stock', 0);
-
-      if (updateError) throw updateError;
-
-      // 4. Gerar Logs de Histórico
-      if (itemsWithStock && itemsWithStock.length > 0) {
-        const logs = itemsWithStock.map(item => ({
-          inventory_id: item.id,
-          type: 'SAIDA',
-          description: 'RESET TOTAL DE ESTOQUE (Zeramento)',
-          quantity: -Number(item.physical_stock),
-          user_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Admin',
-          user_id: user.id
-        }));
-
-        await supabase.from('stock_history').insert(logs);
-      }
+      if (rpcError) throw rpcError;
 
       alert("Estoque zerado com sucesso!");
       onRefresh();
