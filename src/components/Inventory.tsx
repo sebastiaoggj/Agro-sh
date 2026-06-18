@@ -5,7 +5,8 @@ import {
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
   User, ClipboardList, MinusCircle,
-  ShieldCheck, AlertTriangle, Trash2, Lock
+  ShieldCheck, AlertTriangle, Trash2, Lock,
+  DollarSign
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -54,6 +55,12 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       return matchesProduct && matchesFarm;
     });
   }, [stockProp, searchProduct, farmFilter]);
+
+  const totalInventoryValue = useMemo(() => {
+    return filteredItems.reduce((total, item) => {
+        return total + (item.physicalStock * (item.price || 0));
+    }, 0);
+  }, [filteredItems]);
 
   const closeActionModal = () => {
     setActiveActionModal(null);
@@ -331,6 +338,29 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     <div className="space-y-8 animate-in fade-in duration-500 pb-10 print:p-0 max-w-7xl mx-auto">
       {/* Search Header */}
       <div className="space-y-6 print:hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-[2rem] p-6 flex items-center gap-6 shadow-sm">
+                <div className="p-4 bg-blue-50 text-blue-500 rounded-xl">
+                    <Package size={24} />
+                </div>
+                <div>
+                    <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Itens Únicos</p>
+                    <h4 className="text-2xl font-black text-slate-900 tracking-tighter">{filteredItems.length}</h4>
+                </div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-[2rem] p-6 flex items-center gap-6 shadow-sm">
+                <div className="p-4 bg-emerald-50 text-emerald-500 rounded-xl">
+                    <DollarSign size={24} />
+                </div>
+                <div>
+                    <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Valor Total em Estoque</p>
+                    <h4 className="text-2xl font-black text-emerald-600 tracking-tighter">
+                        {totalInventoryValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </h4>
+                </div>
+            </div>
+        </div>
+
         <div className="flex gap-4">
           <div className="relative flex-1 group">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors" size={20} />
@@ -407,31 +437,29 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             <thead>
               <tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-[0.2em] border-b border-slate-100">
                 <th className="px-10 py-8">Produto</th>
-                <th className="px-10 py-8">Ativo</th>
                 <th className="px-10 py-8 text-center uppercase">Estoque Físico</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Reservados</th>
-                <th className="px-10 py-8 text-center uppercase tracking-widest">Qtd. Disponível</th>
+                <th className="px-10 py-8 text-center uppercase tracking-widest">Disponível</th>
+                <th className="px-10 py-8 text-center uppercase tracking-widest">Valor Total (R$)</th>
                 <th className="px-10 py-8 uppercase tracking-widest">Fazenda</th>
-                <th className="px-10 py-8 text-center uppercase tracking-widest">Unidade</th>
-                <th className="px-10 py-8 uppercase tracking-widest">Classe</th>
                 <th className="px-10 py-8 text-right uppercase tracking-widest print:hidden">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredItems.map((item) => {
-                // Cálculo de visualização (Clamp at 0)
                 const available = Math.max(0, item.physicalStock - item.reservedQty);
+                const totalValue = item.physicalStock * (item.price || 0);
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
                     <td className="px-10 py-8">
                       <div className="flex items-center gap-4">
                         <ArrowDownRight size={14} className="text-emerald-500 shrink-0" />
-                        <span className="font-black text-slate-900 text-sm uppercase tracking-tight">{item.name}</span>
+                        <div>
+                            <span className="font-black text-slate-900 text-sm uppercase tracking-tight">{item.name}</span>
+                            <p className="text-slate-400 text-[10px] font-bold tracking-tight uppercase">{item.activeIngredient}</p>
+                        </div>
                       </div>
-                    </td>
-                    <td className="px-10 py-8">
-                      <span className="text-slate-500 text-[11px] font-bold tracking-tight uppercase">{item.activeIngredient}</span>
                     </td>
                     <td className="px-10 py-8 text-center">
                       <span className="text-blue-600 font-black text-lg">{item.physicalStock.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
@@ -444,14 +472,13 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                         {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
+                    <td className="px-10 py-8 text-center">
+                        <span className="text-slate-800 font-black text-sm">
+                            {totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                    </td>
                     <td className="px-10 py-8">
                       <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
-                    </td>
-                    <td className="px-10 py-8 text-center">
-                      <span className="text-slate-500 text-[10px] font-black">{item.unit}</span>
-                    </td>
-                    <td className="px-10 py-8">
-                      <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{item.category}</span>
                     </td>
                     <td className="px-10 py-8 text-right print:hidden">
                       <button 
