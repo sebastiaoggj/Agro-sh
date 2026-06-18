@@ -520,6 +520,7 @@ const App: React.FC = () => {
 
   const handleUpdatePOStatus = async (id: string, status: string, extraData: any = {}) => {
     const userId = session?.user?.id || offlineUserId;
+    const userName = userProfile?.full_name || 'Sistema';
     try {
        if (status === PurchaseOrderStatus.RECEIVED) {
           const { data: po, error: poError } = await supabase.from('purchase_orders').select('*').eq('id', id).single();
@@ -537,7 +538,7 @@ const App: React.FC = () => {
             purchase_order_id: po.id
           });
 
-          // CORREÇÃO: Atualizar o estoque consolidado na tabela 'inventory'
+          // Atualizar o estoque consolidado na tabela 'inventory'
           const { data: inventoryItem, error: invError } = await supabase
             .from('inventory')
             .select('id, physical_stock')
@@ -547,21 +548,36 @@ const App: React.FC = () => {
 
           if (invError && invError.code !== 'PGRST116') throw invError;
 
+          let inventoryId: string;
+
           if (inventoryItem) {
+            inventoryId = inventoryItem.id;
             const newStock = Number(inventoryItem.physical_stock) + Number(po.quantity);
             const { error: updateError } = await supabase.from('inventory').update({ physical_stock: newStock }).eq('id', inventoryItem.id);
             if (updateError) throw updateError;
           } else {
-            const { error: insertError } = await supabase.from('inventory').insert({
+            const { data: newInventoryItem, error: insertError } = await supabase.from('inventory').insert({
               master_insumo_id: po.master_insumo_id,
               farm_id: po.farm_id,
               physical_stock: po.quantity,
               user_id: userId,
               reserved_qty: 0,
               min_stock: 0
-            });
+            }).select('id').single();
             if (insertError) throw insertError;
+            if (!newInventoryItem) throw new Error("Falha ao criar item de inventário.");
+            inventoryId = newInventoryItem.id;
           }
+
+          // ADICIONAR REGISTRO NO HISTÓRICO
+          await supabase.from('stock_history').insert({
+            inventory_id: inventoryId,
+            type: 'ENTRADA',
+            description: `Recebimento Pedido NF ${extraData.invoice_number || 'N/A'}`,
+            quantity: po.quantity,
+            user_name: userName,
+            user_id: userId
+          });
 
           // Atualizar o preço base, se necessário (LÓGICA CORRIGIDA)
           const masterInsumo = masterInsumos.find(mi => mi.id === po.master_insumo_id);
@@ -569,8 +585,6 @@ const App: React.FC = () => {
             const basePrice = masterInsumo.price; // Can be number, null, or undefined
             const newPrice = extraData.unitPrice;
 
-            // Compare prices ensuring they are treated as numbers.
-            // The condition triggers if basePrice is not set, or if it's different from the new price.
             if (basePrice === null || typeof basePrice === 'undefined' || Math.abs(basePrice - newPrice) > 0.01) {
                 const message = (basePrice === null || typeof basePrice === 'undefined')
                     ? `Este insumo não possui um preço base. Deseja definir R$ ${newPrice.toFixed(2)} como o novo preço base?`
