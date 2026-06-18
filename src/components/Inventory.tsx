@@ -5,7 +5,7 @@ import {
   ChevronDown, ArrowDownRight, Beaker,
   Clock, ArrowUpRight, ArrowDownLeft, 
   User, ClipboardList, MinusCircle,
-  ShieldCheck, AlertTriangle, Trash2, Lock, Layers, Calendar, FileText
+  ShieldCheck, AlertTriangle, Trash2, Lock
 } from 'lucide-react';
 import { Insumo, MasterInsumo, StockHistoryEntry } from '../types';
 import { supabase } from '../integrations/supabase/client';
@@ -15,26 +15,23 @@ interface InventoryProps {
   masterInsumos: MasterInsumo[];
   farms: { id: string, name: string }[];
   history: StockHistoryEntry[];
-  stockLots: any[];
   onRefresh: () => void;
   onStockChange?: () => void;
 }
 
-const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, stockLots, onRefresh, onStockChange }) => {
+const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, history, onRefresh, onStockChange }) => {
   const [searchProduct, setSearchProduct] = useState('');
   const [farmFilter, setFarmFilter] = useState('Todas as Fazendas');
   
   const [activeActionModal, setActiveActionModal] = useState<'ENTRADA_MANUAL' | 'BAIXA_MANUAL' | 'TRANSFERIR' | 'HISTORICO' | 'ZERAR_ESTOQUE' | null>(null);
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<Insumo | null>(null);
-  const [isLotsModalOpen, setIsLotsModalOpen] = useState(false);
-  const [selectedItemForLots, setSelectedItemForLots] = useState<Insumo | null>(null);
 
   const [formQty, setFormQty] = useState('');
   const [selectedMasterId, setSelectedMasterId] = useState(''); 
   const [formReason, setFormReason] = useState('');
   const [formDestFarmId, setFormDestFarmId] = useState('');
   const [formUnitPrice, setFormUnitPrice] = useState('');
-  const [resetPassword, setResetPassword] = useState('');
+  const [resetPassword, setResetPassword] = useState(''); // Senha para zerar estoque
   
   const [loading, setLoading] = useState(false);
   const [fixingReserves, setFixingReserves] = useState(false);
@@ -58,18 +55,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     });
   }, [stockProp, searchProduct, farmFilter]);
 
-  const calculateTotalValue = (item: Insumo) => {
-    if (!item.farmId || !item.masterId) return 0;
-    
-    const relevantLots = stockLots.filter(
-      lot => lot.master_insumo_id === item.masterId && lot.farm_id === item.farmId
-    );
-    
-    return relevantLots.reduce((total, lot) => {
-      return total + (Number(lot.remaining_quantity) * Number(lot.unit_price));
-    }, 0);
-  };
-
   const closeActionModal = () => {
     setActiveActionModal(null);
     setFormQty('');
@@ -79,18 +64,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setFormUnitPrice('');
     setResetPassword('');
     setSelectedItemForHistory(null);
-    setIsLotsModalOpen(false);
-    setSelectedItemForLots(null);
   };
 
   const handleHistoryClick = (item: Insumo) => {
     setSelectedItemForHistory(item);
     setActiveActionModal('HISTORICO');
-  };
-
-  const handleLotsClick = (item: Insumo) => {
-    setSelectedItemForLots(item);
-    setIsLotsModalOpen(true);
   };
 
   const handleFixReserves = async () => {
@@ -118,6 +96,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
     setLoading(true);
     try {
+      // 1. Verificar Autenticação (Re-login para validar senha)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !user.email) throw new Error("Usuário não identificado.");
 
@@ -132,11 +111,13 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         return;
       }
 
+      // 2. Buscar itens com saldo para gerar log
       const { data: itemsWithStock } = await supabase
         .from('inventory')
         .select('id, physical_stock')
         .gt('physical_stock', 0);
 
+      // 3. Atualizar Estoque para 0
       const { error: updateError } = await supabase
         .from('inventory')
         .update({ physical_stock: 0 })
@@ -144,6 +125,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
       if (updateError) throw updateError;
 
+      // 4. Gerar Logs de Histórico
       if (itemsWithStock && itemsWithStock.length > 0) {
         const logs = itemsWithStock.map(item => ({
           inventory_id: item.id,
@@ -195,6 +177,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             return;
         }
 
+        // LÓGICA CORRIGIDA para atualizar preço base
         const masterInsumo = masterInsumos.find(mi => mi.id === selectedMasterId);
         if (masterInsumo) {
             const basePrice = masterInsumo.price;
@@ -262,26 +245,11 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        const farm = farms.find(f => f.name === targetItem.farm);
-        if (!farm) {
-          alert("Fazenda do item não encontrada.");
-          setLoading(false);
-          return;
-        }
-
         if (qty > targetItem.physicalStock) {
           alert("Quantidade superior ao estoque físico.");
           setLoading(false);
           return;
         }
-
-        const { error: consumeError } = await supabase.rpc('manual_stock_consumption', {
-            p_master_insumo_id: targetItem.masterId,
-            p_farm_id: farm.id,
-            p_quantity_to_consume: qty
-        });
-
-        if (consumeError) throw consumeError;
 
         await supabase.from('inventory').update({
           physical_stock: Math.max(0, targetItem.physicalStock - qty)
@@ -466,7 +434,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                 <th className="px-10 py-8 text-center uppercase">Estoque Físico</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Reservados</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Qtd. Disponível</th>
-                <th className="px-10 py-8 text-center uppercase">Valor Total (R$)</th>
                 <th className="px-10 py-8 uppercase tracking-widest">Fazenda</th>
                 <th className="px-10 py-8 text-center uppercase tracking-widest">Unidade</th>
                 <th className="px-10 py-8 uppercase tracking-widest">Classe</th>
@@ -475,8 +442,8 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredItems.map((item) => {
+                // Cálculo de visualização (Clamp at 0)
                 const available = Math.max(0, item.physicalStock - item.reservedQty);
-                const totalValue = calculateTotalValue(item);
 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
@@ -500,14 +467,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                         {available.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
-                    <td className="px-10 py-8 text-center">
-                      <button 
-                        onClick={() => handleLotsClick(item)}
-                        className="text-slate-700 font-black text-base hover:text-emerald-600 transition-colors"
-                      >
-                        R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </button>
-                    </td>
                     <td className="px-10 py-8">
                       <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
                     </td>
@@ -530,7 +489,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
               })}
               {filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-10 py-20 text-center">
+                  <td colSpan={9} className="px-10 py-20 text-center">
                     <div className="flex flex-col items-center gap-4 opacity-20">
                       <Package size={56} className="text-slate-400" />
                       <p className="text-[10px] font-black uppercase tracking-[0.4em]">Nenhum item em estoque</p>
@@ -542,50 +501,6 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           </table>
         </div>
       </div>
-
-      {/* Lot Details Modal */}
-      {isLotsModalOpen && selectedItemForLots && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white border border-slate-200 rounded-[3rem] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col p-10 space-y-8 animate-in zoom-in-95 max-h-[90vh]">
-            <div className="flex justify-between items-center shrink-0">
-               <div>
-                 <h3 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase">Composição de Valor</h3>
-                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">{selectedItemForLots.name} - {selectedItemForLots.farm}</p>
-               </div>
-               <button onClick={closeActionModal} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-slate-400 text-[9px] uppercase font-black tracking-[0.2em] border-b border-slate-100">
-                    <th className="px-4 py-4">Data Entrada</th>
-                    <th className="px-4 py-4">Origem</th>
-                    <th className="px-4 py-4 text-center">Qtd. Restante</th>
-                    <th className="px-4 py-4 text-center">Preço Unit.</th>
-                    <th className="px-4 py-4 text-right">Valor do Lote</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {stockLots.filter(lot => lot.master_insumo_id === selectedItemForLots.masterId && lot.farm_id === selectedItemForLots.farmId && lot.remaining_quantity > 0).map(lot => (
-                    <tr key={lot.id}>
-                      <td className="px-4 py-4 text-xs font-bold text-slate-600 flex items-center gap-2"><Calendar size={14} /> {new Date(lot.entry_date).toLocaleDateString('pt-BR')}</td>
-                      <td className="px-4 py-4 text-xs font-bold text-slate-500 italic truncate max-w-[200px]"><FileText size={14} className="inline-block mr-2" />{lot.source_description}</td>
-                      <td className="px-4 py-4 text-center text-sm font-black text-blue-600">{Number(lot.remaining_quantity).toLocaleString('pt-BR')}</td>
-                      <td className="px-4 py-4 text-center text-sm font-bold text-slate-500">R$ {Number(lot.unit_price).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                      <td className="px-4 py-4 text-right text-sm font-black text-emerald-600">R$ {(Number(lot.remaining_quantity) * Number(lot.unit_price)).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="pt-6 border-t border-slate-100 flex justify-end">
-               <button onClick={closeActionModal} className="px-12 py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10">Fechar</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* History Modal */}
       {activeActionModal === 'HISTORICO' && selectedItemForHistory && (

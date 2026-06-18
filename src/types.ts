@@ -59,7 +59,6 @@ export interface Insumo extends MasterInsumo {
   reservedQty: number;
   availableQty: number;
   farm: string;
-  farmId?: string;
   minStock: number;
   // Campos auxiliares para vincular corretamente
   masterId?: string;

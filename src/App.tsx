@@ -67,7 +67,6 @@ const App: React.FC = () => {
   const [crops, setCrops] = useState<{id: string, name: string, variety: string}[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [stockHistory, setStockHistory] = useState<StockHistoryEntry[]>([]);
-  const [stockLots, setStockLots] = useState<any[]>([]);
   const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
 
   // Responsividade: Fechar sidebar em telas pequenas ao carregar
@@ -198,7 +197,6 @@ const App: React.FC = () => {
           category: item.master_insumo?.category || 'OUTROS',
           price: item.master_insumo?.price || 0,
           farm: item.farm?.name || 'Desconhecida',
-          farmId: item.farm_id,
           physicalStock: Number(item.physical_stock),
           reservedQty: Number(item.reserved_qty),
           availableQty: Number(item.physical_stock) - Number(item.reserved_qty),
@@ -272,11 +270,6 @@ const App: React.FC = () => {
           status: item.status as PurchaseOrderStatus,
           invoiceNumber: item.invoice_number
         })));
-      }
-
-      const { data: lotsData } = await supabase.from('stock_lots').select('*');
-      if (lotsData) {
-        setStockLots(lotsData);
       }
     } catch (error) { console.error(error); }
   };
@@ -677,7 +670,7 @@ const App: React.FC = () => {
           />;
         case 'calendar': return <ContentWrapper><CalendarView orders={orders} /></ContentWrapper>;
         case 'stats': return <ContentWrapper><StatsView orders={orders} inventory={inventory} /></ContentWrapper>;
-        case 'inventory': return <ContentWrapper><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} stockLots={stockLots} /></ContentWrapper>;
+        case 'inventory': return <ContentWrapper><Inventory stockProp={inventory} onRefresh={handleRefresh} onStockChange={triggerAutoRelease} masterInsumos={masterInsumos} farms={farms} history={stockHistory} /></ContentWrapper>;
         
         case 'master_insumos':
           return effectiveProfile?.can_manage_inputs ? (
