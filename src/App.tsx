@@ -198,6 +198,7 @@ const App: React.FC = () => {
           category: item.master_insumo?.category || 'OUTROS',
           price: item.master_insumo?.price || 0,
           farm: item.farm?.name || 'Desconhecida',
+          farmId: item.farm_id,
           physicalStock: Number(item.physical_stock),
           reservedQty: Number(item.reserved_qty),
           availableQty: Number(item.physical_stock) - Number(item.reserved_qty),

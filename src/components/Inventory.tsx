@@ -57,11 +57,10 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   }, [stockProp, searchProduct, farmFilter]);
 
   const calculateTotalValue = (item: Insumo) => {
-    const farm = farms.find(f => f.name === item.farm);
-    if (!farm || !item.masterId) return 0;
+    if (!item.farmId || !item.masterId) return 0;
     
     const relevantLots = stockLots.filter(
-      lot => lot.master_insumo_id === item.masterId && lot.farm_id === farm.id
+      lot => lot.master_insumo_id === item.masterId && lot.farm_id === item.farmId
     );
     
     return relevantLots.reduce((total, lot) => {
