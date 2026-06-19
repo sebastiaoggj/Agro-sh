@@ -228,24 +228,16 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
           return;
         }
 
-        await supabase.rpc('manual_stock_consumption', {
+        const { error } = await supabase.rpc('manual_stock_consumption', {
           p_master_insumo_id: targetItem.masterId,
           p_farm_id: farm.id,
-          p_quantity_to_consume: qty
+          p_quantity_to_consume: qty,
+          p_reason: formReason || 'Ajuste/Perda',
+          p_user_id: user.id,
+          p_user_name: user.email?.split('@')[0] || 'Usuário'
         });
 
-        await supabase.from('inventory').update({
-          physical_stock: Math.max(0, targetItem.physicalStock - qty)
-        }).eq('id', targetItem.id);
-
-        await supabase.from('stock_history').insert({
-          inventory_id: targetItem.id,
-          type: 'SAIDA',
-          description: `Baixa Manual: ${formReason || 'Ajuste/Perda'}`,
-          quantity: -qty,
-          user_name: user.email?.split('@')[0] || 'Usuário',
-          user_id: user.id
-        });
+        if (error) throw error;
 
       } else if (activeActionModal === 'TRANSFERIR') {
         const originItem = stockProp.find(s => s.id === selectedMasterId);
@@ -274,66 +266,23 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         await supabase.rpc('manual_stock_consumption', {
           p_master_insumo_id: originItem.masterId,
           p_farm_id: originFarm.id,
-          p_quantity_to_consume: qty
-        });
-
-        await supabase.from('inventory').update({
-          physical_stock: Math.max(0, originItem.physicalStock - qty)
-        }).eq('id', originItem.id);
-
-        await supabase.from('stock_history').insert({
-          inventory_id: originItem.id,
-          type: 'SAIDA',
-          description: `Transferência para outra fazenda`,
-          quantity: -qty,
-          user_name: user.email?.split('@')[0] || 'Logística',
-          user_id: user.id
+          p_quantity_to_consume: qty,
+          p_reason: `Transferência para outra fazenda`,
+          p_user_id: user.id,
+          p_user_name: user.email?.split('@')[0] || 'Logística'
         });
 
         // 2. Create new lot and add to destination
         const unitPrice = originItem.price || 0; // Use average price for the new lot
 
-        const { data: destExisting } = await supabase
-          .from('inventory')
-          .select('*')
-          .eq('master_insumo_id', originItem.masterId)
-          .eq('farm_id', formDestFarmId)
-          .single();
-
-        let destInvId = destExisting?.id;
-
-        if (destExisting) {
-          destInvId = destExisting.id;
-          await supabase.from('inventory').update({
-            physical_stock: Number(destExisting.physical_stock) + qty
-          }).eq('id', destInvId);
-        } else {
-          const { data: newDest, error } = await supabase.from('inventory').insert({
-            master_insumo_id: originItem.masterId,
-            farm_id: formDestFarmId,
-            physical_stock: qty,
-            user_id: user.id
-          }).select().single();
-          if (error) throw error;
-          destInvId = newDest.id;
-        }
-
-        await supabase.from('stock_lots').insert({
-            master_insumo_id: originItem.masterId,
-            farm_id: formDestFarmId,
-            initial_quantity: qty,
-            remaining_quantity: qty,
-            unit_price: unitPrice,
-            source_description: `Transferido de ${originItem.farm}`
-        });
-
-        await supabase.from('stock_history').insert({
-          inventory_id: destInvId,
-          type: 'ENTRADA',
-          description: `Recebido por transferência de ${originItem.farm}`,
-          quantity: qty,
-          user_name: user.email?.split('@')[0] || 'Logística',
-          user_id: user.id
+        await supabase.rpc('add_stock_manual', {
+          p_master_insumo_id: originItem.masterId,
+          p_farm_id: formDestFarmId,
+          p_quantity: qty,
+          p_unit_price: unitPrice,
+          p_reason: `Recebido por transferência de ${originItem.farm}`,
+          p_user_id: user.id,
+          p_user_name: user.email?.split('@')[0] || 'Logística'
         });
       }
 
