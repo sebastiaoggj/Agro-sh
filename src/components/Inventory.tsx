@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Package, Search, History, X,
   ArrowDownCircle, ArrowLeftRight, MapPin, 
@@ -48,6 +48,23 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
   const [loading, setLoading] = useState(false);
   const [fixingReserves, setFixingReserves] = useState(false);
 
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [productSearch, setProductSearch] = useState('');
+  const [selectedProductName, setSelectedProductName] = useState('');
+  const productDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (productDropdownRef.current && !productDropdownRef.current.contains(event.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   useEffect(() => {
     if (activeActionModal === 'ENTRADA_MANUAL' && selectedMasterId) {
         const insumo = masterInsumos.find(i => i.id === selectedMasterId);
@@ -84,6 +101,10 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setFormDestFarmId('');
     setFormUnitPrice('');
     setResetPassword('');
+    // Reset search
+    setIsProductDropdownOpen(false);
+    setProductSearch('');
+    setSelectedProductName('');
   };
 
   const handleHistoryClick = (item: Insumo) => {
@@ -631,16 +652,37 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                   <>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Selecionar do Catálogo</label>
-                      <div className="relative">
+                      <div className="relative" ref={productDropdownRef}>
                         <Beaker className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-500" size={18} />
-                        <select 
-                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 appearance-none uppercase"
-                          value={selectedMasterId}
-                          onChange={(e) => setSelectedMasterId(e.target.value)}
-                        >
-                          <option value="">Buscar Insumo Mestre...</option>
-                          {masterInsumos.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                        </select>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                          placeholder="Buscar Insumo Mestre..."
+                          value={isProductDropdownOpen ? productSearch : selectedProductName}
+                          onFocus={() => { setIsProductDropdownOpen(true); setSelectedProductName(''); }}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                        />
+                        {isProductDropdownOpen && (
+                          <div className="absolute z-10 top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                            {masterInsumos
+                              .filter(ins => ins.name.toLowerCase().includes(productSearch.toLowerCase()))
+                              .map(ins => (
+                                <div
+                                  key={ins.id}
+                                  className="px-4 py-3 text-xs font-bold uppercase text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedMasterId(ins.id);
+                                    setSelectedProductName(ins.name);
+                                    setIsProductDropdownOpen(false);
+                                    setProductSearch('');
+                                  }}
+                                >
+                                  {ins.name}
+                                </div>
+                              ))
+                            }
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-1.5">
@@ -673,16 +715,40 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                 {activeActionModal === 'BAIXA_MANUAL' && (
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item em Estoque</label>
-                    <div className="relative">
+                    <div className="relative" ref={productDropdownRef}>
                       <Package className="absolute left-6 top-1/2 -translate-y-1/2 text-orange-500" size={18} />
-                      <select 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-500 appearance-none uppercase"
-                        value={selectedMasterId}
-                        onChange={(e) => setSelectedMasterId(e.target.value)}
-                      >
-                        <option value="">Selecionar para dar Baixa...</option>
-                        {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} - {i.farm} (Físico: {i.physicalStock} {i.unit})</option>)}
-                      </select>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-orange-500 uppercase"
+                        placeholder="Buscar Item em Estoque..."
+                        value={isProductDropdownOpen ? productSearch : selectedProductName}
+                        onFocus={() => { setIsProductDropdownOpen(true); setSelectedProductName(''); }}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                      />
+                      {isProductDropdownOpen && (
+                        <div className="absolute z-10 top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                          {stockProp
+                            .filter(i => `${i.name} - ${i.farm}`.toLowerCase().includes(productSearch.toLowerCase()))
+                            .map(i => {
+                                const displayText = `${i.name} - ${i.farm} (Físico: ${i.physicalStock} ${i.unit})`;
+                                return (
+                                  <div
+                                    key={i.id}
+                                    className="px-4 py-3 text-xs font-bold uppercase text-slate-700 hover:bg-orange-50 cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedMasterId(i.id);
+                                      setSelectedProductName(displayText);
+                                      setIsProductDropdownOpen(false);
+                                      setProductSearch('');
+                                    }}
+                                  >
+                                    {displayText}
+                                  </div>
+                                )
+                            })
+                          }
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -691,16 +757,40 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                   <>
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Item de Origem</label>
-                      <div className="relative">
+                      <div className="relative" ref={productDropdownRef}>
                         <ArrowUpRight className="absolute left-6 top-1/2 -translate-y-1/2 text-indigo-500" size={18} />
-                        <select 
-                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 appearance-none uppercase"
-                          value={selectedMasterId}
-                          onChange={(e) => setSelectedMasterId(e.target.value)}
-                        >
-                          <option value="">Selecionar Origem...</option>
-                          {stockProp.map(i => <option key={i.id} value={i.id}>{i.name} ({i.farm}) - Físico: {i.physicalStock} {i.unit}</option>)}
-                        </select>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-16 pr-6 py-4 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500 uppercase"
+                          placeholder="Buscar Item de Origem..."
+                          value={isProductDropdownOpen ? productSearch : selectedProductName}
+                          onFocus={() => { setIsProductDropdownOpen(true); setSelectedProductName(''); }}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                        />
+                        {isProductDropdownOpen && (
+                          <div className="absolute z-10 top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                            {stockProp
+                              .filter(i => `${i.name} (${i.farm})`.toLowerCase().includes(productSearch.toLowerCase()))
+                              .map(i => {
+                                  const displayText = `${i.name} (${i.farm}) - Físico: ${i.physicalStock} ${i.unit}`;
+                                  return (
+                                    <div
+                                      key={i.id}
+                                      className="px-4 py-3 text-xs font-bold uppercase text-slate-700 hover:bg-indigo-50 cursor-pointer"
+                                      onClick={() => {
+                                        setSelectedMasterId(i.id);
+                                        setSelectedProductName(displayText);
+                                        setIsProductDropdownOpen(false);
+                                        setProductSearch('');
+                                      }}
+                                    >
+                                      {displayText}
+                                    </div>
+                                  )
+                              })
+                            }
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-1.5">
