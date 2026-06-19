@@ -73,16 +73,17 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     }, 0);
   }, [filteredItems]);
 
-  const closeActionModal = () => {
+  const closeAllModals = () => {
     setActiveActionModal(null);
+    setIsLotModalOpen(false);
+    setSelectedItemForHistory(null);
+    // Reset forms
     setFormQty('');
     setSelectedMasterId('');
     setFormReason('');
     setFormDestFarmId('');
     setFormUnitPrice('');
     setResetPassword('');
-    setSelectedItemForHistory(null);
-    setIsLotModalOpen(false);
   };
 
   const handleHistoryClick = (item: Insumo) => {
@@ -90,12 +91,9 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
     setActiveActionModal('HISTORICO');
   };
 
-  const handleLotDetailClick = async (item: Insumo) => {
-    setSelectedItemForHistory(item);
-    setIsLotModalOpen(true);
+  const fetchLotsForItem = async (item: Insumo) => {
     setLoading(true);
-    setLots([]); // Limpa lotes anteriores
-
+    setLots([]);
     const farm = farms.find(f => f.name === item.farm);
     if (item.masterId && farm) {
       try {
@@ -111,9 +109,16 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
         if (data) setLots(data);
       } catch (error) {
         console.error("Erro ao buscar lotes:", error);
+        setLots([]);
       }
     }
     setLoading(false);
+  };
+
+  const handleLotDetailClick = (item: Insumo) => {
+    setSelectedItemForHistory(item);
+    setIsLotModalOpen(true);
+    fetchLotsForItem(item);
   };
 
   const handleFixReserves = async () => {
@@ -161,7 +166,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
       alert("Estoque zerado com sucesso!");
       onRefresh();
-      closeActionModal();
+      closeAllModals();
 
     } catch (error: any) {
       console.error("Erro ao zerar:", error);
@@ -382,7 +387,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
       if (onStockChange) {
         onStockChange();
       }
-      closeActionModal();
+      closeAllModals();
 
     } catch (error: any) {
       console.error("Erro na operação:", error);
@@ -574,7 +579,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                  <h3 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase">Histórico de Movimentações</h3>
                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">{selectedItemForHistory.name} - {selectedItemForHistory.farm}</p>
                </div>
-               <button onClick={closeActionModal} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
+               <button onClick={closeAllModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
@@ -617,7 +622,56 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             </div>
 
             <div className="pt-6 border-t border-slate-100 flex justify-end">
-               <button onClick={closeActionModal} className="px-12 py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10">Fechar Histórico</button>
+               <button onClick={closeAllModals} className="px-12 py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10">Fechar Histórico</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lot Detail Modal */}
+      {isLotModalOpen && selectedItemForHistory && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white border border-slate-200 rounded-[3rem] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col p-10 space-y-8 animate-in zoom-in-95 max-h-[90vh]">
+            <div className="flex justify-between items-center shrink-0">
+               <div>
+                 <h3 className="text-3xl font-black text-slate-900 italic tracking-tighter uppercase">Detalhes dos Lotes</h3>
+                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">{selectedItemForHistory.name} - {selectedItemForHistory.farm}</p>
+               </div>
+               <button onClick={closeAllModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+              {loading ? <p>Carregando...</p> : lots.length > 0 ? (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-slate-400 text-[9px] uppercase font-black tracking-[0.2em] border-b border-slate-100">
+                      <th className="px-4 py-4">Data Entrada</th>
+                      <th className="px-4 py-4">Origem</th>
+                      <th className="px-4 py-4 text-right">Preço Unit.</th>
+                      <th className="px-4 py-4 text-right">Qtd. Restante</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {lots.map(lot => (
+                      <tr key={lot.id}>
+                        <td className="px-4 py-4 text-xs font-bold text-slate-600">{new Date(lot.entry_date).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-4 py-4 text-xs font-medium text-slate-500">{lot.source_description}</td>
+                        <td className="px-4 py-4 text-right text-xs font-black text-emerald-600">{lot.unit_price.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}</td>
+                        <td className="px-4 py-4 text-right text-sm font-black text-blue-600">{lot.remaining_quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 opacity-20">
+                   <Layers size={64} className="text-slate-400 mb-4" />
+                   <p className="text-[10px] font-black uppercase tracking-[0.4em]">Nenhum lote ativo para este item</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 border-t border-slate-100 flex justify-end">
+               <button onClick={closeAllModals} className="px-12 py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-slate-900/10">Fechar</button>
             </div>
           </div>
         </div>
@@ -639,7 +693,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                    activeActionModal === 'TRANSFERIR' ? 'Movimentação logística de ativos' : 'Ajuste de inventário operacional'}
                 </p>
               </div>
-              <button onClick={closeActionModal} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
+              <button onClick={closeAllModals} className="text-slate-300 hover:text-red-500 transition-colors"><X size={32} /></button>
             </div>
             
             {activeActionModal === 'ZERAR_ESTOQUE' ? (
@@ -801,7 +855,7 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             )}
 
             <div className="flex gap-4 pt-4 border-t border-slate-100">
-              <button onClick={closeActionModal} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors" disabled={loading}>Cancelar</button>
+              <button onClick={closeAllModals} className="flex-1 py-5 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-colors" disabled={loading}>Cancelar</button>
               <button 
                 onClick={activeActionModal === 'ZERAR_ESTOQUE' ? handleResetStockSubmit : handleActionSubmit} 
                 className={`flex-1 ${
