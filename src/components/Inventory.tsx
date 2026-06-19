@@ -202,63 +202,17 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
             return;
         }
 
-        const masterInsumo = masterInsumos.find(mi => mi.id === selectedMasterId);
-        if (masterInsumo) {
-            const basePrice = masterInsumo.price;
-            if (basePrice === null || typeof basePrice === 'undefined' || Math.abs(basePrice - unitPrice) > 0.01) {
-                const message = (basePrice === null || typeof basePrice === 'undefined')
-                    ? `Este insumo não possui um preço base. Deseja definir R$ ${unitPrice.toFixed(2)} como o novo preço base?`
-                    : `O preço base deste insumo é R$ ${basePrice.toFixed(2)}, mas o valor informado é R$ ${unitPrice.toFixed(2)}. Deseja atualizar o preço base para futuros lançamentos?`;
-
-                if (confirm(message)) {
-                    await supabase.from('master_insumos').update({ price: unitPrice }).eq('id', selectedMasterId);
-                }
-            }
-        }
-
-        const { data: existingItem } = await supabase
-          .from('inventory')
-          .select('*')
-          .eq('master_insumo_id', selectedMasterId)
-          .eq('farm_id', formDestFarmId)
-          .single();
-        
-        let inventoryId = existingItem?.id;
-
-        if (existingItem) {
-          inventoryId = existingItem.id;
-          await supabase.from('inventory').update({
-            physical_stock: Number(existingItem.physical_stock) + qty
-          }).eq('id', inventoryId);
-        } else {
-          const { data: newItem, error } = await supabase.from('inventory').insert({
-            master_insumo_id: selectedMasterId,
-            farm_id: formDestFarmId,
-            physical_stock: qty,
-            user_id: user.id
-          }).select().single();
-          
-          if (error) throw error;
-          inventoryId = newItem.id;
-        }
-
-        await supabase.from('stock_lots').insert({
-            master_insumo_id: selectedMasterId,
-            farm_id: formDestFarmId,
-            initial_quantity: qty,
-            remaining_quantity: qty,
-            unit_price: unitPrice,
-            source_description: `Entrada Manual: ${formReason || 'Ajuste de inventário'}`
+        const { error } = await supabase.rpc('add_stock_manual', {
+          p_master_insumo_id: selectedMasterId,
+          p_farm_id: formDestFarmId,
+          p_quantity: qty,
+          p_unit_price: unitPrice,
+          p_reason: formReason,
+          p_user_id: user.id,
+          p_user_name: user.email?.split('@')[0] || 'Usuário'
         });
 
-        await supabase.from('stock_history').insert({
-          inventory_id: inventoryId,
-          type: 'ENTRADA',
-          description: `Entrada Manual: ${formReason || 'Ajuste de inventário'}`,
-          quantity: qty,
-          user_name: user.email?.split('@')[0] || 'Usuário',
-          user_id: user.id
-        });
+        if (error) throw error;
 
       } else if (activeActionModal === 'BAIXA_MANUAL') {
         const targetItem = stockProp.find(s => s.id === selectedMasterId);
