@@ -40,6 +40,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [fieldPartialAreas, setFieldPartialAreas] = useState<Record<string, number>>({});
 
+  const [openInsumoDropdown, setOpenInsumoDropdown] = useState<number | null>(null);
+  const [insumoSearch, setInsumoSearch] = useState('');
+  const insumoItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
   const [formData, setFormData] = useState({
     id: initialData?.id || '',
     operationType: initialData?.operationType || 'PULVERIZACAO' as OperationType,
@@ -98,6 +102,26 @@ const OrderForm: React.FC<OrderFormProps> = ({
       }
     }
   }, [formData.operationType]);
+
+  useEffect(() => {
+    insumoItemRefs.current = insumoItemRefs.current.slice(0, items.length);
+  }, [items.length]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        openInsumoDropdown !== null &&
+        insumoItemRefs.current[openInsumoDropdown] &&
+        !insumoItemRefs.current[openInsumoDropdown]!.contains(event.target as Node)
+      ) {
+        setOpenInsumoDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [openInsumoDropdown]);
 
   const uniqueCultures = useMemo(() => {
     const names = new Set(crops.map(c => c.name));
@@ -629,12 +653,46 @@ const OrderForm: React.FC<OrderFormProps> = ({
                 <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-4 relative group hover:shadow-md transition-all">
                   <button onClick={() => removeProduct(idx)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div className="md:col-span-6 space-y-1">
+                    <div className="md:col-span-6 space-y-1 relative" ref={el => insumoItemRefs.current[idx] = el}>
                       <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Produto</label>
-                      <select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500" value={item.insumoId} onChange={(e) => updateItem(idx, e.target.value, item.dosePerHa)}>
-                        <option value="">{availableInsumos.length > 0 ? "SELECIONE..." : "SEM PRODUTOS"}</option>
-                        {availableInsumos.map(ins => <option key={ins.id} value={ins.id}>{ins.name} (Disp: {ins.availableQty})</option>)}
-                      </select>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500 uppercase"
+                          placeholder={availableInsumos.length > 0 ? "BUSCAR INSUMO..." : "SEM PRODUTOS"}
+                          value={openInsumoDropdown === idx ? insumoSearch : item.productName || ''}
+                          onFocus={() => {
+                            setOpenInsumoDropdown(idx);
+                            setInsumoSearch('');
+                          }}
+                          onChange={(e) => setInsumoSearch(e.target.value)}
+                          disabled={!formData.farmId || availableInsumos.length === 0}
+                        />
+                        <SearchIcon className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                      </div>
+
+                      {openInsumoDropdown === idx && (
+                        <div className="absolute z-20 top-full left-0 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar">
+                          {availableInsumos
+                            .filter(ins => ins.name.toLowerCase().includes(insumoSearch.toLowerCase()))
+                            .map(ins => (
+                              <div
+                                key={ins.id}
+                                className="px-4 py-3 text-xs font-bold uppercase text-slate-700 hover:bg-emerald-50 cursor-pointer"
+                                onClick={() => {
+                                  updateItem(idx, ins.id, item.dosePerHa);
+                                  setOpenInsumoDropdown(null);
+                                }}
+                              >
+                                {ins.name} <span className="text-slate-400 font-medium">(Disp: {ins.availableQty})</span>
+                              </div>
+                            ))
+                          }
+                          {availableInsumos.filter(ins => ins.name.toLowerCase().includes(insumoSearch.toLowerCase())).length === 0 && (
+                            <div className="px-4 py-3 text-xs font-medium text-slate-400 text-center">Nenhum produto encontrado.</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="md:col-span-2 space-y-1">
                       <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Dose/ha</label>
