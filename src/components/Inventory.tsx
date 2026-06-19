@@ -92,21 +92,28 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
 
   const handleLotDetailClick = async (item: Insumo) => {
     setSelectedItemForHistory(item);
+    setIsLotModalOpen(true);
     setLoading(true);
+    setLots([]); // Limpa lotes anteriores
+
     const farm = farms.find(f => f.name === item.farm);
     if (item.masterId && farm) {
-      const { data, error } = await supabase
-        .from('stock_lots')
-        .select('*')
-        .eq('master_insumo_id', item.masterId)
-        .eq('farm_id', farm.id)
-        .gt('remaining_quantity', 0)
-        .order('entry_date', { ascending: true });
-      
-      if (data) setLots(data);
+      try {
+        const { data, error } = await supabase
+          .from('stock_lots')
+          .select('*')
+          .eq('master_insumo_id', item.masterId)
+          .eq('farm_id', farm.id)
+          .gt('remaining_quantity', 0)
+          .order('entry_date', { ascending: true });
+        
+        if (error) throw error;
+        if (data) setLots(data);
+      } catch (error) {
+        console.error("Erro ao buscar lotes:", error);
+      }
     }
     setLoading(false);
-    setIsLotModalOpen(true);
   };
 
   const handleFixReserves = async () => {
@@ -522,9 +529,12 @@ const Inventory: React.FC<InventoryProps> = ({ stockProp, masterInsumos, farms, 
                       </span>
                     </td>
                     <td className="px-10 py-8 text-center">
+                      <div className="inline-flex items-center gap-2 group-hover:bg-slate-100 p-2 rounded-lg transition-colors">
                         <span className="text-slate-800 font-black text-sm">
                             {totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                         </span>
+                        <Layers size={14} className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
+                      </div>
                     </td>
                     <td className="px-10 py-8">
                       <span className="text-slate-600 text-[10px] font-black uppercase tracking-widest italic">{item.farm}</span>
